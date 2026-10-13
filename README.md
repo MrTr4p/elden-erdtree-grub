@@ -6,6 +6,8 @@ An Elden Ring inspired boot menu: engraved gold Erdtree artwork, a dark backgrou
 
 **[Watch the real GRUB recording](docs/preview.mp4)** · **[Install](#install-the-standard-theme)** · **[Build and preview](docs/BUILD.md)** · **[Animated EFI guide](docs/ANIMATED-EFI.md)**
 
+[Download v0.1.0](https://github.com/MrTr4p/elden-erdtree-grub/releases/tag/v0.1.0): theme/source bundle, bootable demo ISO, preview video, complete patched GRUB source, and checksums.
+
 This is a fan project. The selection shimmer and confirmation flash/fade are custom effects inspired by the game, not an exact recreation of its UI.
 
 ## Two versions
