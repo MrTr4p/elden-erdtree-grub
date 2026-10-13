@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Event-driven menu effects. No scene animation and no disk I/O in a frame.
+ * Native ambient and event-driven menu effects. No disk I/O in a frame.
  * Included by gfxmenu/view.c. Opt in with set erdtree_motion=1.
  */
 #include <grub/env.h>
@@ -11,21 +11,57 @@ erdtree_enabled (void)
   return value && !grub_strcmp (value, "1");
 }
 
+#include "erdtree_ambient.h"
+
 void
 grub_gfxmenu_motion_idle (void *data)
 {
   grub_gfxmenu_view_t view = data;
-  grub_uint64_t now;
+  struct grub_erdtree_ambient *motion = view->ambient;
+  grub_video_rect_t region = view->screen;
+  grub_uint64_t now, elapsed;
   grub_err_t saved_errno = grub_errno;
-  if (!erdtree_enabled () || !view->motion_active)
-    return;
+  int scene_due, selection_due;
+  if (!erdtree_enabled ()) return;
   now = grub_get_time_ms ();
-  if (now - view->motion_last < 25)
-    return;
-  view->motion_last = now;
-  if (now - view->motion_changed >= 360)
-    view->motion_active = 0;
-  grub_gfxmenu_redraw_menu (view);
+  scene_due = erdtree_ambient_enabled () && motion && now - motion->last >= motion->frame_ms;
+  selection_due = view->motion_active && now - view->motion_last >= 25;
+  if (!scene_due && !selection_due) return;
+  if (selection_due)
+    {
+      view->motion_last = now;
+      if (now - view->motion_changed >= 360) view->motion_active = 0;
+    }
+  if (scene_due)
+    {
+      motion->last = now;
+      erdtree_ambient_render (view, now);
+      if (!selection_due)
+        {
+          if (motion->variant == 4)
+            {
+              int w = view->screen.width, h = view->screen.height;
+              region.x += w * 27 / 100;
+              region.y += h * 205 / 1000;
+              region.width = w * 73 / 100 - w * 27 / 100;
+              region.height = h * 67 / 100 - h * 205 / 1000;
+            }
+          else
+            {
+              region.x += view->screen.width / 2;
+              region.width -= view->screen.width / 2;
+            }
+        }
+      grub_video_set_area_status (GRUB_VIDEO_AREA_ENABLED);
+      grub_gfxmenu_view_redraw (view, &region);
+      grub_video_swap_buffers ();
+      if (view->double_repaint) grub_gfxmenu_view_redraw (view, &region);
+      elapsed = grub_get_time_ms () - now;
+      if (elapsed > motion->frame_ms)
+        motion->frame_ms = elapsed > 990 ? 1000 : (unsigned) elapsed + 10;
+    }
+  else
+    grub_gfxmenu_redraw_menu (view);
   grub_errno = saved_errno;
 }
 

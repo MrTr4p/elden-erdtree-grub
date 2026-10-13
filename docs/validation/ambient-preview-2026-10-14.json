@@ -1,0 +1,146 @@
+{
+  "1920x1080": {
+    "resolution": "1920x1080",
+    "host_disks_attached": false,
+    "mode": "interactive",
+    "ambient": true,
+    "iso_sha256": "690c1e0826f8a7627d1f9f16fb4a797cdee4a4364f47e7622aa19dc436941767",
+    "checks": {
+      "resolution": true,
+      "ambient_animates_tree": true,
+      "ambient_keeps_title_and_menu_still": true,
+      "ambient_is_subtle": true,
+      "selection_changes": true,
+      "title_stays_identical_during_selection": true,
+      "selection_shimmer_has_multiple_frames": true,
+      "selection_settles_completely": true,
+      "confirmation_fades_scene": true,
+      "windows_test_action_runs": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "ambient_resumes_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "ambient_mean_pixel_delta": 0.488,
+    "confirmation_tree_brightness_range": [
+      0.0,
+      42.635
+    ],
+    "recording_wall_seconds": 9.745,
+    "video": "previews/1920x1080/erdtree-menu-preview.mp4",
+    "passed": true
+  },
+  "1024x768": {
+    "resolution": "1024x768",
+    "host_disks_attached": false,
+    "mode": "interactive",
+    "ambient": true,
+    "iso_sha256": "e343e6880209983218d57a9a340c7f1cebd685e371c11510b6a840caf539e375",
+    "checks": {
+      "resolution": true,
+      "ambient_animates_tree": true,
+      "ambient_keeps_title_and_menu_still": true,
+      "ambient_is_subtle": true,
+      "selection_changes": true,
+      "title_stays_identical_during_selection": true,
+      "selection_shimmer_has_multiple_frames": true,
+      "selection_settles_completely": true,
+      "confirmation_fades_scene": true,
+      "windows_test_action_runs": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "ambient_resumes_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "ambient_mean_pixel_delta": 0.365,
+    "confirmation_tree_brightness_range": [
+      0.0,
+      43.449
+    ],
+    "passed": true
+  },
+  "1920x1080-static": {
+    "resolution": "1920x1080",
+    "host_disks_attached": false,
+    "mode": "static",
+    "ambient": false,
+    "iso_sha256": "272a93c9889925c229144a62579695aa965a9030fb0824f2e214a27b6cc4334e",
+    "checks": {
+      "resolution": true,
+      "entire_scene_still_when_idle": true,
+      "selection_changes": true,
+      "tree_stays_identical_during_selection": true,
+      "selection_settles_completely": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "passed": true
+  },
+  "1920x1080-no-ambient": {
+    "resolution": "1920x1080",
+    "host_disks_attached": false,
+    "mode": "interactive",
+    "ambient": false,
+    "iso_sha256": "266465eb2e377d4728a10adc73f312909305e1423a0f88d3b35aede89194cb41",
+    "checks": {
+      "resolution": true,
+      "entire_scene_still_when_idle": true,
+      "selection_changes": true,
+      "tree_stays_identical_during_selection": true,
+      "selection_shimmer_has_multiple_frames": true,
+      "selection_settles_completely": true,
+      "confirmation_fades_scene": true,
+      "windows_test_action_runs": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "confirmation_tree_brightness_range": [
+      0.0,
+      40.625
+    ],
+    "passed": true
+  },
+  "1920x1080-autoboot": {
+    "resolution": "1920x1080",
+    "host_disks_attached": false,
+    "mode": "autoboot",
+    "ambient": true,
+    "iso_sha256": "cadbc944c29b5ae8e4bbacd70710df2dfaeb21cab19662e5205c7ace0af11249",
+    "checks": {
+      "countdown_and_confirmation_execute": true,
+      "no_grub_errors": true
+    },
+    "autoboot_seconds": 4.11,
+    "passed": true
+  },
+  "browser": {
+    "passed": true,
+    "keyboard": true,
+    "buttons": true,
+    "pause_and_resume": true,
+    "fullscreen": true,
+    "token_required": true,
+    "invalid_key_rejected": true,
+    "mobile_no_horizontal_overflow": true,
+    "reduced_motion_respected": true,
+    "page_errors": []
+  }
+}

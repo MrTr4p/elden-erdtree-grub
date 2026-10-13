@@ -25,7 +25,7 @@ Install the dependencies in [BUILD.md](BUILD.md), then:
 
 ```sh
 ./build.sh
-python3 preview.py --standalone
+python3 preview.py --variant ring --standalone
 ```
 
 A successful run prints `"passed": true`. This exercises a separate FAT image in QEMU and does not attach your disks.
@@ -45,25 +45,23 @@ ERDTREE_PATH=$(sudo grub-mkrelpath "$ERDTREE_CFG")
 mkdir -p dist
 sudo cat "$ERDTREE_CFG" > dist/host-grub.cfg
 
-python3 make-efi.py \
+python3 make-efi.py --variant ring \
   --config dist/host-grub.cfg \
   --fs-uuid "$ERDTREE_UUID" \
   --config-path "$ERDTREE_PATH" \
-  --output dist/erdtree-x86_64.efi
+  --output dist/erdtree-ring-x86_64.efi
 ```
 
-Use the corresponding `grub2-probe`/`grub2-mkrelpath` names where needed. The standard theme installer is not a prerequisite; the EFI file embeds its own theme and fonts.
+Use the corresponding `grub2-probe`/`grub2-mkrelpath` names where needed. The standard installer is not a prerequisite; the EFI file generates and embeds the selected theme and fonts. `--variant ring` selects the centered sigil menu and particles. Other choices are `grace` (default), `carian`, `destined`, and `farum`. Generation needs Pillow and `grub-mkfont`, already in the build dependencies.
 
 The source configuration is inspected but not changed. The EFI file embeds only a small loader and theme; at boot it finds the filesystem by UUID and sources your existing menu. Regenerating that existing menu therefore updates its entries. The local configuration copy and generated EFI file stay in ignored `dist/`; do not publish machine-specific configuration.
 
 For another resolution, generate a separate theme and pass matching flags:
 
 ```sh
-python3 build-theme.py --resolution 1024x768 --output dist/theme-1024
-python3 make-efi.py --config dist/host-grub.cfg \
+python3 make-efi.py --variant ring --config dist/host-grub.cfg \
   --fs-uuid "$ERDTREE_UUID" --config-path "$ERDTREE_PATH" \
-  --theme-dir dist/theme-1024 --resolution 1024x768 \
-  --output dist/erdtree-x86_64.efi
+  --resolution 1024x768 --output dist/erdtree-ring-x86_64.efi
 ```
 
 ## 3. Add a separate firmware entry
@@ -82,7 +80,7 @@ For example, if the mounted ESP is `/boot/efi`, on partition 1 of `/dev/nvme0n1`
 
 ```sh
 sudo install -d /boot/efi/EFI/Erdtree
-sudo install -m 0644 dist/erdtree-x86_64.efi /boot/efi/EFI/Erdtree/grubx64.efi
+sudo install -m 0644 dist/erdtree-ring-x86_64.efi /boot/efi/EFI/Erdtree/grubx64.efi
 sudo efibootmgr --create-only --disk /dev/nvme0n1 --part 1 \
   --label "Erdtree Preview" --loader '\EFI\Erdtree\grubx64.efi'
 sudo efibootmgr -v
@@ -111,6 +109,6 @@ Use your actual ESP mount path. Do not remove any distribution or Microsoft dire
 
 The executable includes all of its matching GRUB modules. Never copy patched modules into your distribution's module directory. Rebuild the EFI image to update the embedded theme or native code.
 
-The loader uses `source` to retain the current menu context and reapplies the embedded theme afterwards. It keeps the module prefix on its own memdisk. That isolation is why environment-block and distribution-specific workflows listed above require additional engineering.
+The loader uses `source` to retain the current menu context and reapplies the embedded theme, variant, and motion settings afterwards. It keeps the module prefix on its own memdisk. That isolation is why environment-block and distribution-specific workflows listed above require additional engineering. If supplying `--theme-dir`, generate it for the same variant and resolution passed to `make-efi.py`.
 
 References: [GRUB prefix](https://www.gnu.org/software/grub/manual/grub/html_node/prefix.html), [GRUB source](https://www.gnu.org/software/grub/manual/grub/html_node/source.html), [efibootmgr upstream](https://github.com/rhboot/efibootmgr).

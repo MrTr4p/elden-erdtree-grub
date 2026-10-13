@@ -1,0 +1,170 @@
+{
+  "carian": {
+    "vm": {
+      "resolution": "1920x1080",
+      "host_disks_attached": false,
+      "mode": "interactive",
+      "ambient": true,
+      "variant": "carian",
+      "iso_sha256": "bf3a9c0dfc9956f23532bc7822cf7527341b46da0160408c30958b50ac3da8dd",
+      "checks": {
+        "resolution": true,
+        "ambient_animates_scene": true,
+        "ambient_keeps_title_and_menu_still": true,
+        "ambient_is_subtle": true,
+        "menu_stays_still_through_scene": true,
+        "scene_has_continuous_motion": true,
+        "selection_changes": true,
+        "title_stays_identical_during_selection": true,
+        "selection_shimmer_has_multiple_frames": true,
+        "selection_settles_completely": true,
+        "confirmation_fades_scene": true,
+        "windows_test_action_runs": true,
+        "submenu_opens": true,
+        "entry_editor_opens": true,
+        "console_opens": true,
+        "menu_still_after_return": true,
+        "ambient_resumes_after_return": true,
+        "rapid_input_selects_windows": true,
+        "linux_test_action_runs": true,
+        "no_grub_errors": true
+      },
+      "ambient_mean_pixel_delta": 0.76,
+      "scene_motion_frames": 15,
+      "confirmation_scene_brightness_range": [
+        0.002,
+        86.655
+      ],
+      "recording_wall_seconds": 11.169,
+      "video": "previews/1920x1080-carian/erdtree-menu-preview.mp4",
+      "passed": true
+    },
+    "browser": {
+      "variant": "carian",
+      "passed": true,
+      "keyboard": true,
+      "buttons": true,
+      "pause_and_resume": true,
+      "fullscreen": true,
+      "token_required": true,
+      "invalid_key_rejected": true,
+      "mobile_no_horizontal_overflow": true,
+      "reduced_motion_respected": true,
+      "page_errors": []
+    },
+    "artwork": "concepts/carian/background.png",
+    "prompt": "concepts/carian/prompt.txt"
+  },
+  "destined": {
+    "vm": {
+      "resolution": "1920x1080",
+      "host_disks_attached": false,
+      "mode": "interactive",
+      "ambient": true,
+      "variant": "destined",
+      "iso_sha256": "459f5f7cd9e4ecefc7b5527e8499358930b7c10b45b7c9abba426c5385107036",
+      "checks": {
+        "resolution": true,
+        "ambient_animates_scene": true,
+        "ambient_keeps_title_and_menu_still": true,
+        "ambient_is_subtle": true,
+        "menu_stays_still_through_scene": true,
+        "scene_has_continuous_motion": true,
+        "selection_changes": true,
+        "title_stays_identical_during_selection": true,
+        "selection_shimmer_has_multiple_frames": true,
+        "selection_settles_completely": true,
+        "confirmation_fades_scene": true,
+        "windows_test_action_runs": true,
+        "submenu_opens": true,
+        "entry_editor_opens": true,
+        "console_opens": true,
+        "menu_still_after_return": true,
+        "ambient_resumes_after_return": true,
+        "rapid_input_selects_windows": true,
+        "linux_test_action_runs": true,
+        "no_grub_errors": true
+      },
+      "ambient_mean_pixel_delta": 0.715,
+      "scene_motion_frames": 15,
+      "confirmation_scene_brightness_range": [
+        0.0,
+        33.107
+      ],
+      "recording_wall_seconds": 11.002,
+      "video": "previews/1920x1080-destined/erdtree-menu-preview.mp4",
+      "passed": true
+    },
+    "browser": {
+      "variant": "destined",
+      "passed": true,
+      "keyboard": true,
+      "buttons": true,
+      "pause_and_resume": true,
+      "fullscreen": true,
+      "token_required": true,
+      "invalid_key_rejected": true,
+      "mobile_no_horizontal_overflow": true,
+      "reduced_motion_respected": true,
+      "page_errors": []
+    },
+    "artwork": "concepts/destined/background.png",
+    "prompt": "concepts/destined/prompt.txt"
+  },
+  "farum": {
+    "vm": {
+      "resolution": "1920x1080",
+      "host_disks_attached": false,
+      "mode": "interactive",
+      "ambient": true,
+      "variant": "farum",
+      "iso_sha256": "2341637bc3840359c20b9344a9b36a17b443ff1438e78597a113eb47db3feeaf",
+      "checks": {
+        "resolution": true,
+        "ambient_animates_scene": true,
+        "ambient_keeps_title_and_menu_still": true,
+        "ambient_is_subtle": true,
+        "menu_stays_still_through_scene": true,
+        "scene_has_continuous_motion": true,
+        "selection_changes": true,
+        "title_stays_identical_during_selection": true,
+        "selection_shimmer_has_multiple_frames": true,
+        "selection_settles_completely": true,
+        "confirmation_fades_scene": true,
+        "windows_test_action_runs": true,
+        "submenu_opens": true,
+        "entry_editor_opens": true,
+        "console_opens": true,
+        "menu_still_after_return": true,
+        "ambient_resumes_after_return": true,
+        "rapid_input_selects_windows": true,
+        "linux_test_action_runs": true,
+        "no_grub_errors": true
+      },
+      "ambient_mean_pixel_delta": 0.179,
+      "scene_motion_frames": 15,
+      "confirmation_scene_brightness_range": [
+        0.001,
+        88.075
+      ],
+      "recording_wall_seconds": 10.992,
+      "video": "previews/1920x1080-farum/erdtree-menu-preview.mp4",
+      "passed": true
+    },
+    "browser": {
+      "variant": "farum",
+      "passed": true,
+      "keyboard": true,
+      "buttons": true,
+      "pause_and_resume": true,
+      "fullscreen": true,
+      "token_required": true,
+      "invalid_key_rejected": true,
+      "mobile_no_horizontal_overflow": true,
+      "reduced_motion_respected": true,
+      "page_errors": []
+    },
+    "artwork": "concepts/farum/background.png",
+    "prompt": "concepts/farum/prompt.txt"
+  }
+}

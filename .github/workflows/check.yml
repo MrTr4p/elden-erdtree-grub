@@ -18,7 +18,9 @@ jobs:
           python3 -m py_compile *.py
           sh -n install.sh build.sh
       - name: Regenerate theme
-        run: python3 build-theme.py --output dist/theme
+        run: |
+          python3 build-theme.py --output dist/theme
+          python3 build-theme.py --variant ring --output dist/theme-ring
       - name: Build pinned GRUB
         run: ./build.sh
       - name: Patcher is repeatable
@@ -26,3 +28,22 @@ jobs:
           cp patches/grub-2.14-erdtree-interactions.patch /tmp/erdtree-patch.before
           python3 patch-source.py
           cmp /tmp/erdtree-patch.before patches/grub-2.14-erdtree-interactions.patch
+  arch-install:
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
+      - name: Arch dependencies
+        run: pacman -Syu --noconfirm --needed base-devel curl freetype2 python python-pillow grub git
+      - uses: actions/checkout@v4
+      - name: Installer and EFI loader tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Install and uninstall every variant with Arch GRUB
+        run: python3 tests/arch_install.py
+      - name: Build patched GRUB on Arch
+        run: ./build.sh
+      - name: Generate standalone Ring EFI from Arch menu
+        run: |
+          python3 make-efi.py --variant ring --config /boot/grub/grub.cfg \
+            --fs-uuid 11111111-2222-3333-4444-555555555555 \
+            --config-path /boot/grub/grub.cfg --output dist/arch-ring.efi
+          grub-file --is-x86_64-efi dist/arch-ring.efi

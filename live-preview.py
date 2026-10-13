@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local interactive viewer for the actual preview VM; never attaches host disks."""
 import argparse
+import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
@@ -15,21 +16,31 @@ import threading
 import time
 import urllib.parse
 from PIL import Image
+from variants import VARIANTS, preview_tag, url_path
 
 BASE = Path(__file__).resolve().parent
 from preview_tools import tools, preview_env, firmware_args
 TOOLS = tools()
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=0)
+parser.add_argument('--variant', choices=VARIANTS, default='grace')
 parser.add_argument('--no-open', action='store_true')
+parser.add_argument('--static', action='store_true', help='Use the static preview ISO')
+parser.add_argument('--no-ambient', action='store_true', help='Use the selection-only preview ISO')
 args = parser.parse_args()
 TOKEN = secrets.token_urlsafe(24)
+saved_url = url_path(args.variant)
+if saved_url.exists():
+    saved_token = urllib.parse.parse_qs(urllib.parse.urlsplit(saved_url.read_text().strip()).query).get('token', [''])[0]
+    if len(saved_token) == 32 and all(c.isalnum() or c in '-_' for c in saved_token):
+        TOKEN = saved_token
 runtime = tempfile.TemporaryDirectory(prefix='erdtree-vm-')
 work = Path(runtime.name)
 qmp = work/'qmp.sock'
 env = preview_env(TOOLS)
-iso = BASE/'previews/1920x1080/preview.iso'
-if not iso.exists(): raise SystemExit('Run python3 preview.py first.')
+tag = preview_tag('1920x1080', args.variant, '-static' if args.static else '-no-ambient' if args.no_ambient else '')
+iso = BASE/'previews'/tag/'preview.iso'
+if not iso.exists(): raise SystemExit('Run python3 preview.py with the same mode flags first.')
 command = [TOOLS['qemu'], '-L', TOOLS['qemu_data'],
     '-machine','q35','-accel',TOOLS['accel'],'-cpu',TOOLS['cpu'],'-m','512','-vga','std',
     *firmware_args(TOOLS, work),'-display','none',
@@ -64,41 +75,20 @@ try:
             if 'error' in msg: raise RuntimeError(msg)
             if 'return' in msg: return msg['return']
     rpc('qmp_capabilities')
-    page = '''<!doctype html><html lang="en"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Erdtree — live boot menu preview</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#050605;color:#ceba8f;font:14px Georgia,serif;height:100vh;display:flex;flex-direction:column}
-main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}img{width:100%;height:100%;object-fit:contain}
-footer{display:flex;gap:20px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;background:#0c0d0b;border-top:1px solid #51452b}
-button{background:transparent;border:1px solid #6a5731;color:#e4cea3;padding:9px 18px;font:inherit;cursor:pointer}
-button:hover,button:focus-visible{background:#322918}#status{font-size:12px;color:#97856b}
-</style><main><img id="screen" alt="Live Elden Ring boot menu preview"></main>
-<footer><span>PREVIEW</span><button data-key="up">↑</button><button data-key="down">↓</button>
-<button data-key="ret">Enter / confirm</button><button data-key="esc">Back</button>
-<span id="status">Arrow keys select · Enter confirms · No operating system is booted</span></footer>
-<script>
-const token=new URLSearchParams(location.search).get('token'),screen=document.querySelector('#screen');
-let previous, stopped=false, requests=Promise.resolve();
-async function update(){
- try{
-  const response=await fetch('/frame?token='+token,{cache:'no-store'});
-  if(!response.ok)throw Error('Preview stopped');
-  const next=URL.createObjectURL(await response.blob());
-  await new Promise((resolve,reject)=>{screen.onload=resolve;screen.onerror=reject;screen.src=next;});
-  if(previous)URL.revokeObjectURL(previous);previous=next;
- }catch(e){document.querySelector('#status').textContent='Preview stopped. Relaunch live-preview.py to try again.';stopped=true;}
- if(!stopped)setTimeout(update,16);
-}
-function key(k){
- requests=requests.then(()=>fetch('/key?token='+token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}));
-}
-document.querySelectorAll('[data-key]').forEach(button=>button.onclick=()=>key(button.dataset.key));
-window.addEventListener('keydown',event=>{
- const k={ArrowUp:'up',ArrowDown:'down',Enter:'ret',Escape:'esc',Home:'home',End:'end'}[event.key];
- if(k){event.preventDefault();key(k);}
-});
-update();
-</script></html>'''
+    def viewer_page():
+        palette = VARIANTS[args.variant]
+        page = (BASE/'viewer.html').read_text()
+        page = page.replace('Site of Grace — live boot menu', html.escape(palette['title']) + ' — live boot menu')
+        page = page.replace('SITE OF GRACE / BOOT MENU', html.escape(palette['title'].upper()) + ' / BOOT MENU')
+        page = page.replace('a gently swaying Site of Grace flame and circling golden wisps', html.escape(palette['description']))
+        page = page.replace('AWAITING GRACE…', 'ENTERING ' + html.escape(palette['title'].upper()) + '…')
+        style = f'''<style>body,main:fullscreen{{background:{palette['background']};color:{palette['text']}}}
+header,footer{{background:{palette['panel']};border-color:{palette['accent']}44}}
+.brand,button{{color:{palette['selected']}}}button{{background:{palette['panel']};border-color:{palette['accent']}66}}
+button:hover{{background:{palette['accent']}22;border-color:{palette['accent']}}}
+button:focus-visible{{outline-color:{palette['accent']}}}.dot{{background:{palette['accent']};box-shadow:0 0 9px {palette['accent']}66}}
+.live,#status,.loading{{color:{palette['text']}}}.meta{{color:{palette['hint']}}}</style>'''
+        return page.replace('</head>', style + '</head>').encode()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a): pass
         def authorized(self):
@@ -115,7 +105,7 @@ update();
         def do_GET(self):
             if not self.authorized(): return self.reply(b'Forbidden','text/plain',403)
             path=urllib.parse.urlsplit(self.path).path
-            if path=='/': return self.reply(page.encode(),'text/html; charset=utf-8')
+            if path=='/': return self.reply(viewer_page(),'text/html; charset=utf-8')
             if path=='/frame':
                 with lock:
                     rpc('screendump',{'filename':str(work/'frame.ppm')})
@@ -140,7 +130,9 @@ update();
             self.reply(b'{"ok":true}','application/json')
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     url=f'http://127.0.0.1:{server.server_port}/?token={TOKEN}'
-    (BASE/'live-preview-url.txt').write_text(url+'\n')
+    saved_url.touch(mode=0o600, exist_ok=True)
+    saved_url.chmod(0o600)
+    saved_url.write_text(url+'\n')
     print(url,flush=True)
     if not args.no_open: subprocess.Popen(['xdg-open',url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     def stop(*_): raise KeyboardInterrupt()

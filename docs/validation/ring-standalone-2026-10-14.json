@@ -1,0 +1,69 @@
+{
+  "resolution": "1920x1080",
+  "host_disks_attached": false,
+  "mode": "standalone",
+  "ambient": true,
+  "variant": "ring",
+  "iso_sha256": "5ab0f6dfa21a7f228b8d7d70c534c1df7019e17292ca09c59f28ea3d2dba5297",
+  "checks": {
+    "resolution": true,
+    "gold_menu_text_is_unobscured": true,
+    "four_menu_labels_are_centered": true,
+    "ambient_animates_scene": true,
+    "ambient_keeps_title_and_menu_still": true,
+    "ambient_is_subtle": true,
+    "menu_stays_still_through_scene": true,
+    "only_sigil_region_glows": true,
+    "scene_has_continuous_motion": true,
+    "gold_dust_flows_beyond_sigil": true,
+    "sigil_glow_brightens_and_settles": true,
+    "selection_changes": true,
+    "title_stays_identical_during_selection": true,
+    "selection_shimmer_has_multiple_frames": true,
+    "selection_settles_completely": true,
+    "confirmation_fades_scene": true,
+    "windows_test_action_runs": true,
+    "submenu_opens": true,
+    "entry_editor_opens": true,
+    "console_opens": true,
+    "menu_still_after_return": true,
+    "ambient_resumes_after_return": true,
+    "rapid_input_selects_windows": true,
+    "linux_test_action_runs": true,
+    "no_grub_errors": true
+  },
+  "menu_label_centers_px": [
+    958.0,
+    958.0,
+    958.0,
+    958.0
+  ],
+  "ambient_mean_pixel_delta": 2.563,
+  "scene_motion_frames": 15,
+  "particle_motion_pixels": [
+    502,
+    483,
+    469,
+    362,
+    150,
+    77,
+    93,
+    87,
+    56,
+    35,
+    52,
+    95,
+    95,
+    120,
+    142
+  ],
+  "sigil_glow_brightness_range": [
+    83.946,
+    96.224
+  ],
+  "confirmation_scene_brightness_range": [
+    0.0,
+    41.998
+  ],
+  "passed": true
+}

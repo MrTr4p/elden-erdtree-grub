@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -88,6 +89,44 @@ class InstallerTest(unittest.TestCase):
             self.install()
             installer.uninstall(self.state, 'mock')
         self.assertEqual(self.defaults.read_text(), 'GRUB_TIMEOUT=9')
+
+    @unittest.skipUnless(shutil.which('grub-mkfont'), 'requires grub-mkfont')
+    def test_ring_assets_install_and_uninstall(self):
+        original = self.defaults.read_bytes()
+        with patch.object(installer, 'run_mkconfig'):
+            installer.install(self.defaults, self.grub, self.state, '1920x1080', 'mock', 'ring')
+            self.assertEqual((self.target/'background.png').read_bytes(),
+                             (installer.BASE/'concepts/ring/background.png').read_bytes())
+            self.assertIn('left = 35% top = 68%', (self.target/'theme.txt').read_text())
+            self.assertTrue((self.target/'menu-shade.png').is_file())
+            self.assertTrue((self.target/'body.pf2').is_file())
+            installer.uninstall(self.state, 'mock')
+        self.assertEqual(self.defaults.read_bytes(), original)
+
+    def test_missing_font_tool_does_not_change_config_or_create_backup(self):
+        with patch.object(installer.shutil, 'which', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'grub-mkfont'):
+                installer.install(self.defaults, self.grub, self.state, '1920x1080', 'mock', 'ring')
+        self.assertFalse(self.state.exists())
+        self.assertFalse(self.target.exists())
+        self.assertEqual(self.config.read_text(), 'original working config\n')
+
+    def test_failed_theme_generation_cleans_staging_and_keeps_config(self):
+        original = self.defaults.read_bytes()
+        with patch.object(installer.shutil, 'which', return_value='/usr/bin/grub-mkfont'), \
+             patch.object(installer.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['font'])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                installer.install(self.defaults, self.grub, self.state, '1024x768', 'mock', 'ring')
+        self.assertEqual(self.defaults.read_bytes(), original)
+        self.assertEqual(self.config.read_text(), 'original working config\n')
+        self.assertFalse(self.state.exists())
+        self.assertEqual(list(self.target.parent.iterdir()), [])
+
+    def test_missing_config_fails_preflight(self):
+        self.config.unlink()
+        with self.assertRaisesRegex(RuntimeError, 'working GRUB'):
+            installer.preflight(self.defaults, self.grub, self.state, '1920x1080', 'grace')
+        self.assertFalse(self.state.exists())
 
 if __name__ == '__main__':
     unittest.main()

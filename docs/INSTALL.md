@@ -7,23 +7,25 @@ The normal installer only installs artwork, fonts, and theme configuration. It d
 - Linux with working GRUB 2 and an existing full `grub.cfg`.
 - Python 3.
 - `grub-mkconfig` or `grub2-mkconfig`.
-- For custom sizes: Pillow and `grub-mkfont` / `grub2-mkfont`.
+- For Ring/other variants or custom sizes: Pillow and `grub-mkfont` / `grub2-mkfont`.
 - A firmware graphics mode compatible with the chosen size.
 
-Default installation uses the checked-in fonts and images. It does not require a compiler, QEMU, or Pillow.
+Default Grace installation at 1920×1080 uses checked-in fonts and images, without a compiler, QEMU, or Pillow. Other variants generate assets locally. On Arch install `python-pillow grub`; on Debian/Ubuntu install `python3-pil grub-common`. See [the Arch walkthrough](ARCH-LINUX.md).
 
 ## Commands
 
 ```sh
 git clone https://github.com/MrTr4p/elden-erdtree-grub.git
 cd elden-erdtree-grub
-./install.sh --dry-run
-sudo ./install.sh
+./install.sh --variant ring --dry-run
+sudo ./install.sh --variant ring
 ```
 
 Use `--grub-dir /boot/grub2` on a system whose full configuration lives there. Do not point this at an ESP directory such as `/boot/efi/EFI/fedora`; that may contain a forwarding stub rather than the full configuration.
 
 The installer regenerates the full menu at `GRUB_DIR/grub.cfg`. It inherits your distribution's installed GRUB scripts and OS discovery behavior.
+
+Choose `ring`, `grace`, `carian`, `destined`, or `farum` with `--variant`. Omitting it retains the Grace default. Dry-run checks the existing GRUB files and generation tools. The standard installer provides static artwork and stock text alignment; centered uppercase Ring labels and effects require [the animated EFI build](ANIMATED-EFI.md).
 
 ## What changes
 
@@ -40,7 +42,7 @@ The installer refuses to overwrite an existing theme directory or installation r
 ```sh
 sudo ./install.sh --uninstall
 git pull --ff-only
-sudo ./install.sh
+sudo ./install.sh --variant ring
 ```
 
 Uninstall keeps unrelated edits made to your defaults after installation. If regeneration fails during uninstall, the installed configuration is restored and the theme stays in place.
@@ -51,7 +53,7 @@ If the marked block was manually edited and uninstall refuses, first inspect the
 
 ## Appearance and missing entries
 
-The image contains the title, subtitle, divider, and tree. Actual OS names, highlight, navigation help, and timeout text are rendered by GRUB.
+Each background contains its scene and title. Actual OS names, highlight, navigation help, and timeout text are rendered by GRUB.
 
 The four short names in the preview are demonstration entries. Your real menu keeps your distribution's labels. Rename entries through your distribution's supported GRUB configuration mechanism; editing generated `grub.cfg` is overwritten on the next regeneration.
 

@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from variants import VARIANTS
 
 BASE = Path(__file__).resolve().parent
 BEGIN = '# BEGIN ELDEN ERDTREE GRUB'
@@ -54,7 +55,7 @@ def block(theme, resolution):
 def run_mkconfig(command, config):
     subprocess.run([command, '-o', str(config)], check=True)
 
-def install(defaults, grub_dir, state, resolution, mkconfig):
+def preflight(defaults, grub_dir, state, resolution, variant):
     target = grub_dir/'themes'/NAME
     config = grub_dir/'grub.cfg'
     if state.exists() or target.exists():
@@ -64,6 +65,22 @@ def install(defaults, grub_dir, state, resolution, mkconfig):
     original = defaults.read_text()
     if BEGIN in original or END in original:
         raise RuntimeError('An existing installer block was found; resolve it before installing.')
+    block(target/'theme.txt', resolution)
+    if variant not in VARIANTS:
+        raise RuntimeError('Unknown theme variant.')
+    if variant != 'grace' or resolution != '1920x1080':
+        try:
+            from PIL import Image  # noqa: F401
+        except ImportError as error:
+            raise RuntimeError('Install python-pillow (Arch) or python3-pil (Debian/Ubuntu).') from error
+        if not shutil.which(os.environ.get('GRUB_MKFONT', 'grub-mkfont')):
+            raise RuntimeError('grub-mkfont is required; install grub or set GRUB_MKFONT=grub2-mkfont.')
+    return original
+
+def install(defaults, grub_dir, state, resolution, mkconfig, variant='grace'):
+    original = preflight(defaults, grub_dir, state, resolution, variant)
+    target = grub_dir/'themes'/NAME
+    config = grub_dir/'grub.cfg'
     addition = block(target/'theme.txt', resolution)
     identity = uuid.uuid4().hex
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -73,15 +90,16 @@ def install(defaults, grub_dir, state, resolution, mkconfig):
         shutil.copy2(defaults, state/'defaults.before')
         shutil.copy2(config, state/'grub.cfg.before')
         receipt = dict(defaults=str(defaults), grub_dir=str(grub_dir), id=identity,
-                       original_had_newline=original.endswith('\n'))
+                       original_had_newline=original.endswith('\n'),
+                       variant=variant, resolution=resolution)
         (state/'receipt.json').write_text(json.dumps(receipt, indent=2))
         with tempfile.TemporaryDirectory(prefix='.erdtree-', dir=target.parent) as stage:
             staged = Path(stage)/'theme'
-            if resolution == '1920x1080':
+            if resolution == '1920x1080' and variant == 'grace':
                 shutil.copytree(BASE/'theme', staged)
             else:
                 subprocess.run(['python3', str(BASE/'build-theme.py'), '--resolution',
-                                resolution, '--output', str(staged)], check=True)
+                                resolution, '--variant', variant, '--output', str(staged)], check=True)
             (staged/'.erdtree-install-id').write_text(identity)
             staged.rename(target)
         changed = True
@@ -91,11 +109,14 @@ def install(defaults, grub_dir, state, resolution, mkconfig):
         if changed:
             shutil.copy2(state/'defaults.before', defaults)
             shutil.copy2(state/'grub.cfg.before', config)
-        if target.exists() and (target/'.erdtree-install-id').read_text() == identity:
+        marker = target/'.erdtree-install-id'
+        if marker.is_file() and marker.read_text() == identity:
             shutil.rmtree(target)
         shutil.rmtree(state)
         raise
-    print(f'Installed theme: {target}\nBackups: {state}\nYour existing GRUB bootloader was kept.')
+    print(f'Installed {VARIANTS[variant]["title"]}: {target}\nBackups: {state}\n'
+          'Your existing GRUB bootloader was kept. This installs the static theme.\n'
+          'For animated glow and particles, follow docs/ANIMATED-EFI.md.')
 
 def uninstall(state, mkconfig):
     receipt = json.loads((state/'receipt.json').read_text())
@@ -131,6 +152,8 @@ def main():
     parser.add_argument('--uninstall', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--resolution', default='1920x1080')
+    parser.add_argument('--variant', choices=VARIANTS, default='grace',
+                        help='Artwork to install; use ring for the golden sigil design')
     parser.add_argument('--grub-dir', type=Path, help='Usually /boot/grub or /boot/grub2')
     parser.add_argument('--state-dir', type=Path, default=Path('/var/lib/elden-erdtree-grub'))
     args = parser.parse_args()
@@ -153,9 +176,16 @@ def main():
             args.grub_dir = candidates[0]
         args.grub_dir = args.grub_dir.resolve()
         if args.dry_run:
+            try:
+                preflight(args.defaults, args.grub_dir, args.state_dir, args.resolution, args.variant)
+                if not command:
+                    raise RuntimeError('Install GRUB first; grub-mkconfig/grub2-mkconfig was not found.')
+            except (OSError, RuntimeError) as error:
+                parser.exit(1, f'Preflight stopped: {error}\n')
             print(f'Would copy theme to {args.grub_dir}/themes/{NAME}, back up and update '
                   f'{args.defaults}, then run {command or "grub-mkconfig"} -o {args.grub_dir}/grub.cfg.\n'
-                  f'Backup directory: {args.state_dir}\nResolution: {args.resolution}\nNo files changed.')
+                  f'Backup directory: {args.state_dir}\nVariant: {args.variant}\n'
+                  f'Resolution: {args.resolution}\nStatic theme; no native animations.\nNo files changed.')
             return
     if os.geteuid() != 0:
         parser.error('Use sudo to install/uninstall, or --dry-run to inspect without changes.')
@@ -165,7 +195,7 @@ def main():
         if args.uninstall:
             uninstall(args.state_dir.resolve(), command)
         else:
-            install(args.defaults.resolve(), args.grub_dir, args.state_dir.resolve(), args.resolution, command)
+            install(args.defaults.resolve(), args.grub_dir, args.state_dir.resolve(), args.resolution, command, args.variant)
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f'Installation stopped: {error}\n')
 if __name__ == '__main__':

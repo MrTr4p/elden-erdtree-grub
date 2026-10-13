@@ -65,6 +65,20 @@ replace('grub-core/normal/menu.c',
         '\t\tif (entry >= 0)\n\t\t  {\n                    menu_set_chosen_entry (entry);\n                    menu_confirm ();\n\t\t    menu_fini ();')
 replace('grub-core/gfxmenu/view.c', 'static grub_gfxmenu_view_t term_view;',
         'static grub_gfxmenu_view_t term_view;\n#include "erdtree_view.h"')
+replace('include/grub/gfxmenu_view.h', '  struct grub_video_bitmap *scaled_desktop_image;',
+        '''  struct grub_video_bitmap *scaled_desktop_image;
+  struct grub_erdtree_ambient *ambient;
+  int ambient_attempted;''')
+replace('grub-core/gfxmenu/view.c', '  view->scaled_desktop_image = 0;',
+        '''  view->scaled_desktop_image = 0;
+  view->ambient = 0;
+  view->ambient_attempted = 0;''')
+replace('grub-core/gfxmenu/view.c', '  grub_video_bitmap_destroy (view->raw_desktop_image);',
+        '  erdtree_ambient_destroy (view);\n  grub_video_bitmap_destroy (view->raw_desktop_image);')
+replace('grub-core/gfxmenu/view.c', '      struct grub_video_bitmap *img = view->scaled_desktop_image;',
+        '      struct grub_video_bitmap *img = erdtree_background (view);')
+replace('grub-core/gfxmenu/view.c', '  init_background (view);',
+        '  init_background (view);\n  erdtree_ambient_init (view);')
 replace('grub-core/gfxmenu/view.c', '  view->need_to_check_sanity = 1;',
         '''  view->motion_changed = view->motion_last = 0;
   view->motion_active = view->motion_confirming = 0;
@@ -89,8 +103,16 @@ replace('grub-core/gfxmenu/gui_list.c',
         '''          if (!erdtree_draw_highlight (self, item_top + sel_box_top_offset,
                                       cwidth, text_box_height))
             selbox->draw (selbox, 0, item_top + sel_box_top_offset);''')
+replace('grub-core/gfxmenu/gui_list.c',
+        '''      grub_font_draw_string (item_title,
+                             font,
+                             color,
+                             0,
+                             text_top_offset);''',
+        '''      erdtree_draw_title (item_title, font, color,
+                           viewport_width, text_top_offset);''')
 
-for name in ['erdtree_view.h', 'erdtree_highlight.h']:
+for name in ['erdtree_view.h', 'erdtree_highlight.h', 'erdtree_ambient.h', 'erdtree_scenes.h', 'erdtree_ring.h']:
     shutil.copy2(BASE / name, SRC / 'grub-core/gfxmenu' / name)
 patch = []
 for original in sorted(BACKUP.rglob('*')):
@@ -98,9 +120,9 @@ for original in sorted(BACKUP.rglob('*')):
     rel = original.relative_to(BACKUP)
     patch.extend(difflib.unified_diff(original.read_text().splitlines(True),
                  (SRC / rel).read_text().splitlines(True), 'a/' + str(rel), 'b/' + str(rel)))
-for name in ['erdtree_view.h', 'erdtree_highlight.h']:
+for name in ['erdtree_view.h', 'erdtree_highlight.h', 'erdtree_ambient.h', 'erdtree_scenes.h', 'erdtree_ring.h']:
     patch.extend(difflib.unified_diff([], (BASE / name).read_text().splitlines(True),
                                     '/dev/null', 'b/grub-core/gfxmenu/' + name))
 (BASE / 'patches').mkdir(exist_ok=True)
 (BASE / 'patches/grub-2.14-erdtree-interactions.patch').write_text(''.join(patch))
-print('Patched private GRUB tree: selection shimmer + confirmation flash/fade.')
+print('Patched private GRUB tree: ambient grace + selection shimmer + confirmation flash/fade.')

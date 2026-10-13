@@ -1,0 +1,23 @@
+{
+  "resolution": "1920x1080",
+  "host_disks_attached": false,
+  "mode": "stock",
+  "ambient": false,
+  "variant": "ring",
+  "iso_sha256": "d696773d5405da5c25b0de050482511354b256ed90396c9566e770d2cf16dbf2",
+  "checks": {
+    "resolution": true,
+    "entire_scene_still_when_idle": true,
+    "selection_changes": true,
+    "scene_stays_identical_during_selection": true,
+    "selection_settles_completely": true,
+    "submenu_opens": true,
+    "entry_editor_opens": true,
+    "console_opens": true,
+    "menu_still_after_return": true,
+    "rapid_input_selects_windows": true,
+    "linux_test_action_runs": true,
+    "no_grub_errors": true
+  },
+  "passed": true
+}

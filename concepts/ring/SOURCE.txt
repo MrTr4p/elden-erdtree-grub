@@ -1,0 +1,6 @@
+Source: original 1600 x 900 PNG supplied by the user on 2026-10-14.
+Copied unchanged to background.png; no image generation or raster editing.
+The native renderer adds a localized, animated gold bloom and flowing golden
+dust around the central sigil. The source image is preserved; the glow and
+particles are calculated only at runtime.
+This image's rights remain with its respective rights holders.

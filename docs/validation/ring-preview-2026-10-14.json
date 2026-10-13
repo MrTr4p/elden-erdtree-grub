@@ -1,0 +1,150 @@
+{
+  "1920x1080": {
+    "resolution": "1920x1080",
+    "host_disks_attached": false,
+    "mode": "interactive",
+    "ambient": true,
+    "variant": "ring",
+    "iso_sha256": "802c813e9512d870091270001559743a2105a434868e27fa33a80532bd0382b7",
+    "checks": {
+      "resolution": true,
+      "gold_menu_text_is_unobscured": true,
+      "four_menu_labels_are_centered": true,
+      "ambient_animates_scene": true,
+      "ambient_keeps_title_and_menu_still": true,
+      "ambient_is_subtle": true,
+      "menu_stays_still_through_scene": true,
+      "only_sigil_region_glows": true,
+      "scene_has_continuous_motion": true,
+      "sigil_glow_brightens_and_settles": true,
+      "selection_changes": true,
+      "title_stays_identical_during_selection": true,
+      "selection_shimmer_has_multiple_frames": true,
+      "selection_settles_completely": true,
+      "confirmation_fades_scene": true,
+      "windows_test_action_runs": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "ambient_resumes_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "menu_label_centers_px": [
+      958.0,
+      958.0,
+      958.0,
+      958.0
+    ],
+    "ambient_mean_pixel_delta": 0.913,
+    "scene_motion_frames": 15,
+    "sigil_glow_brightness_range": [
+      93.084,
+      104.509
+    ],
+    "confirmation_scene_brightness_range": [
+      0.0,
+      41.237
+    ],
+    "recording_wall_seconds": 9.856,
+    "video": "previews/1920x1080-ring/erdtree-menu-preview.mp4",
+    "passed": true
+  },
+  "1024x768": {
+    "resolution": "1024x768",
+    "host_disks_attached": false,
+    "mode": "interactive",
+    "ambient": true,
+    "variant": "ring",
+    "iso_sha256": "f24f8ca3d52ac6adb31bd069b3656c3358c96f4257da6dd84da24eea67136ae9",
+    "checks": {
+      "resolution": true,
+      "gold_menu_text_is_unobscured": true,
+      "four_menu_labels_are_centered": true,
+      "ambient_animates_scene": true,
+      "ambient_keeps_title_and_menu_still": true,
+      "ambient_is_subtle": true,
+      "menu_stays_still_through_scene": true,
+      "only_sigil_region_glows": true,
+      "scene_has_continuous_motion": true,
+      "sigil_glow_brightens_and_settles": true,
+      "selection_changes": true,
+      "title_stays_identical_during_selection": true,
+      "selection_shimmer_has_multiple_frames": true,
+      "selection_settles_completely": true,
+      "confirmation_fades_scene": true,
+      "windows_test_action_runs": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "ambient_resumes_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "menu_label_centers_px": [
+      510.0,
+      509.5,
+      509.5,
+      509.5
+    ],
+    "ambient_mean_pixel_delta": 1.384,
+    "scene_motion_frames": 15,
+    "sigil_glow_brightness_range": [
+      92.823,
+      104.532
+    ],
+    "confirmation_scene_brightness_range": [
+      0.0,
+      40.7
+    ],
+    "passed": true
+  },
+  "static": {
+    "resolution": "1920x1080",
+    "host_disks_attached": false,
+    "mode": "static",
+    "ambient": false,
+    "variant": "ring",
+    "iso_sha256": "33eda162d2979a71ed91ba2754b1227e05f3c48b13865b0377859eced3eb19a5",
+    "checks": {
+      "resolution": true,
+      "gold_menu_text_is_unobscured": true,
+      "four_menu_labels_are_centered": true,
+      "entire_scene_still_when_idle": true,
+      "selection_changes": true,
+      "scene_stays_identical_during_selection": true,
+      "selection_settles_completely": true,
+      "submenu_opens": true,
+      "entry_editor_opens": true,
+      "console_opens": true,
+      "menu_still_after_return": true,
+      "rapid_input_selects_windows": true,
+      "linux_test_action_runs": true,
+      "no_grub_errors": true
+    },
+    "menu_label_centers_px": [
+      958.0,
+      958.0,
+      958.0,
+      958.0
+    ],
+    "passed": true
+  },
+  "browser": {
+    "variant": "ring",
+    "passed": true,
+    "keyboard": true,
+    "buttons": true,
+    "pause_and_resume": true,
+    "fullscreen": true,
+    "token_required": true,
+    "invalid_key_rejected": true,
+    "mobile_no_horizontal_overflow": true,
+    "reduced_motion_respected": true,
+    "page_errors": []
+  }
+}

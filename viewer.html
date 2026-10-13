@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Site of Grace — live boot menu</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#070806;color:#cfbf9d;font:12px Georgia,serif;height:100dvh;display:flex;flex-direction:column}
+    header{height:45px;flex-shrink:0;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #302b1e;background:#0d0e0b;letter-spacing:1.5px}
+    .brand{font-weight:700;color:#d1bb8b}.live{font-size:10px;color:#998868;display:flex;align-items:center;gap:8px}.dot{width:6px;height:6px;border-radius:50%;background:#b89a55;box-shadow:0 0 9px #b89a5566}
+    main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+    #screen{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+    .loading{position:absolute;color:#cfbf9d;letter-spacing:3px}main.ready .loading{display:none}
+    footer{min-height:82px;flex-shrink:0;background:#0d0e0b;border-top:1px solid #302b1e;padding:13px 24px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .controls,.extras{display:flex;align-items:center;gap:8px}button{font:inherit;background:#17160f;border:1px solid #4a3e26;color:#d4bf90;min-height:36px;padding:8px 13px;cursor:pointer;border-radius:2px}
+    button:hover{background:#30291b;border-color:#aa8b4f}button:focus-visible{outline:2px solid #ddc18d;outline-offset:3px}button:disabled{opacity:.35;cursor:wait}#status{font-size:10px;color:#a79778;max-width:470px;line-height:1.7}
+    .meta{margin-top:3px;color:#7f725b;font-size:9px;letter-spacing:.4px}.caption{line-height:1.8}.key{font-size:17px;padding:4px 15px}
+    main:fullscreen{background:#070806;width:100%;height:100%;cursor:default}main:fullscreen #screen{height:100%;width:100%}
+    @media(max-width:720px){header{padding:0 14px;font-size:10px}.live{letter-spacing:0}footer{padding:12px 14px;justify-content:center}.caption{width:100%;text-align:center}.controls{gap:5px}button{padding:8px 9px;font-size:10px}.brand{letter-spacing:1px}}
+  </style>
+</head>
+<body>
+  <header><span class="brand">SITE OF GRACE / BOOT MENU</span><span class="live"><i class="dot" aria-hidden="true"></i> LIVE PREVIEW</span></header>
+  <main id="display"><span class="loading" role="status">AWAITING GRACE…</span><img id="screen" alt="Live Elden Ring GRUB menu with a gently swaying Site of Grace flame and circling golden wisps"></main>
+  <footer>
+    <div class="controls" aria-label="Boot menu navigation">
+      <button class="key" data-key="up" aria-label="Previous boot entry">↑</button>
+      <button class="key" data-key="down" aria-label="Next boot entry">↓</button>
+      <button data-key="ret">ENTER / CONFIRM</button>
+      <button data-key="esc">BACK</button>
+    </div>
+    <div class="caption"><div id="status" role="status">Arrow keys select · Enter confirms · Esc goes back</div><div class="meta">ISOLATED PREVIEW · OS selections show a demo message and return</div></div>
+    <div class="extras"><button id="pause" aria-pressed="false">PAUSE VIEW</button><button id="fullscreen">FULLSCREEN</button></div>
+  </footer>
+  <script>
+    const token = new URLSearchParams(location.search).get('token');
+    const screen = document.querySelector('#screen');
+    const display = document.querySelector('#display');
+    const status = document.querySelector('#status');
+    const pauseButton = document.querySelector('#pause');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let previous, paused = reduced, stopped = false, timer, first = true, updating = false, requests = Promise.resolve();
+    const statusDefault = 'Arrow keys select · Enter confirms · Esc goes back';
+    function setPaused(value) {
+      paused = value;
+      pauseButton.textContent = paused ? 'RESUME VIEW' : 'PAUSE VIEW';
+      pauseButton.setAttribute('aria-pressed', String(paused));
+      status.textContent = paused ? 'View paused. Navigation refreshes the still image.' : statusDefault;
+    }
+    async function update(force = false) {
+      clearTimeout(timer);
+      if (updating || stopped || document.hidden || (paused && !force && !first)) return;
+      updating = true;
+      try {
+        const response = await fetch('/frame?token=' + encodeURIComponent(token), {cache:'no-store'});
+        if (!response.ok) throw Error('Preview disconnected');
+        const next = URL.createObjectURL(await response.blob());
+        await new Promise((resolve, reject) => {screen.onload = resolve; screen.onerror = reject; screen.src = next;});
+        if (previous) URL.revokeObjectURL(previous);
+        previous = next; first = false; display.classList.add('ready');
+      } catch(error) {
+        status.textContent = 'Preview disconnected. Restart live-preview.py and open its new URL.';
+        stopped = true; document.querySelector('.loading').textContent = 'PREVIEW OFFLINE'; return;
+      } finally {updating = false;}
+      if (!paused) timer = setTimeout(update, 25);
+    }
+    function key(value) {
+      requests = requests.then(async () => {
+        const response = await fetch('/key?token=' + encodeURIComponent(token), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key:value})});
+        if (!response.ok) throw Error('Key could not be sent');
+        if (paused) setTimeout(() => update(true), 200);
+      }).catch(() => {status.textContent = 'Input disconnected. Reload the preview to reconnect.';});
+    }
+    document.querySelectorAll('[data-key]').forEach(button => button.addEventListener('click', () => key(button.dataset.key)));
+    window.addEventListener('keydown', event => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target.closest('button') && (event.key === 'Enter' || event.key === ' ')) return;
+      const value = {ArrowUp:'up', ArrowDown:'down', Enter:'ret', Escape:'esc', Home:'home', End:'end'}[event.key];
+      if (value) {event.preventDefault(); key(value);}
+    });
+    pauseButton.addEventListener('click', () => {setPaused(!paused); if (!paused) update();});
+    document.querySelector('#fullscreen').addEventListener('click', async () => {
+      try {if (document.fullscreenElement) await document.exitFullscreen(); else await display.requestFullscreen();}
+      catch {status.textContent = 'Fullscreen is unavailable in this browser.';}
+    });
+    document.addEventListener('visibilitychange', () => {if (!document.hidden && !paused) update(); else clearTimeout(timer);});
+    matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', event => {setPaused(event.matches); if (!paused) update();});
+    setPaused(reduced);
+    update();
+  </script>
+</body>
+</html>

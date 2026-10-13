@@ -41,6 +41,20 @@
            font = self->selected_item_font;
            color = sel_color;
            text_top_offset = sel_text_top_offset;
+@@ -436,11 +441,8 @@
+       sviewport.y = item_top + top_pad;
+       sviewport.width = viewport_width;
+       grub_gui_set_viewport (&sviewport, &svpsave);
+-      grub_font_draw_string (item_title,
+-                             font,
+-                             color,
+-                             0,
+-                             text_top_offset);
++      erdtree_draw_title (item_title, font, color,
++                           viewport_width, text_top_offset);
+       grub_gui_restore_viewport (&svpsave);
+ 
+       item_top += text_box_height + item_vspace;
 --- a/grub-core/gfxmenu/view.c
 +++ b/grub-core/gfxmenu/view.c
 @@ -43,6 +43,7 @@
@@ -60,7 +74,41 @@
    view->need_to_check_sanity = 1;
    view->terminal_border = 3;
    view->terminal_rect.width = view->screen.width * 7 / 10;
-@@ -406,6 +409,12 @@
+@@ -95,6 +98,8 @@
+   view->message_bg_color = default_fg_color;
+   view->raw_desktop_image = 0;
+   view->scaled_desktop_image = 0;
++  view->ambient = 0;
++  view->ambient_attempted = 0;
+   view->desktop_image_scale_method = GRUB_VIDEO_BITMAP_SELECTION_METHOD_STRETCH;
+   view->desktop_image_h_align = GRUB_VIDEO_BITMAP_H_ALIGN_CENTER;
+   view->desktop_image_v_align = GRUB_VIDEO_BITMAP_V_ALIGN_CENTER;
+@@ -134,6 +139,7 @@
+       grub_gfxmenu_timeout_notifications = grub_gfxmenu_timeout_notifications->next;
+       grub_free (p);
+     }
++  erdtree_ambient_destroy (view);
+   grub_video_bitmap_destroy (view->raw_desktop_image);
+   grub_video_bitmap_destroy (view->scaled_desktop_image);
+   if (view->terminal_box)
+@@ -153,7 +159,7 @@
+ {
+   if (view->scaled_desktop_image)
+     {
+-      struct grub_video_bitmap *img = view->scaled_desktop_image;
++      struct grub_video_bitmap *img = erdtree_background (view);
+       grub_video_blit_bitmap (img, GRUB_VIDEO_BLIT_REPLACE,
+                               bounds->x, bounds->y,
+ 			      bounds->x - view->screen.x,
+@@ -345,6 +351,7 @@
+   init_terminal (view);
+ 
+   init_background (view);
++  erdtree_ambient_init (view);
+ 
+   /* Clear the screen; there may be garbage left over in video memory. */
+   grub_video_fill_rect (grub_video_map_rgb (0, 0, 0),
+@@ -406,6 +413,12 @@
  {
    grub_gfxmenu_view_t view = data;
  
@@ -137,7 +185,16 @@
  
  void
  grub_gfxmenu_redraw_menu (grub_gfxmenu_view_t view);
-@@ -111,6 +113,8 @@
+@@ -97,6 +99,8 @@
+   grub_video_rgba_color_t message_bg_color;
+   struct grub_video_bitmap *raw_desktop_image;
+   struct grub_video_bitmap *scaled_desktop_image;
++  struct grub_erdtree_ambient *ambient;
++  int ambient_attempted;
+   grub_video_bitmap_selection_method_t desktop_image_scale_method;
+   grub_video_bitmap_h_align_t desktop_image_h_align;
+   grub_video_bitmap_v_align_t desktop_image_v_align;
+@@ -111,6 +115,8 @@
    int double_repaint;
  
    int selected;
@@ -159,9 +216,9 @@
  void grub_menu_register_viewer (struct grub_menu_viewer *viewer);
 --- /dev/null
 +++ b/grub-core/gfxmenu/erdtree_view.h
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,129 @@
 +/* SPDX-License-Identifier: GPL-3.0-or-later
-+ * Event-driven menu effects. No scene animation and no disk I/O in a frame.
++ * Native ambient and event-driven menu effects. No disk I/O in a frame.
 + * Included by gfxmenu/view.c. Opt in with set erdtree_motion=1.
 + */
 +#include <grub/env.h>
@@ -173,21 +230,57 @@
 +  return value && !grub_strcmp (value, "1");
 +}
 +
++#include "erdtree_ambient.h"
++
 +void
 +grub_gfxmenu_motion_idle (void *data)
 +{
 +  grub_gfxmenu_view_t view = data;
-+  grub_uint64_t now;
++  struct grub_erdtree_ambient *motion = view->ambient;
++  grub_video_rect_t region = view->screen;
++  grub_uint64_t now, elapsed;
 +  grub_err_t saved_errno = grub_errno;
-+  if (!erdtree_enabled () || !view->motion_active)
-+    return;
++  int scene_due, selection_due;
++  if (!erdtree_enabled ()) return;
 +  now = grub_get_time_ms ();
-+  if (now - view->motion_last < 25)
-+    return;
-+  view->motion_last = now;
-+  if (now - view->motion_changed >= 360)
-+    view->motion_active = 0;
-+  grub_gfxmenu_redraw_menu (view);
++  scene_due = erdtree_ambient_enabled () && motion && now - motion->last >= motion->frame_ms;
++  selection_due = view->motion_active && now - view->motion_last >= 25;
++  if (!scene_due && !selection_due) return;
++  if (selection_due)
++    {
++      view->motion_last = now;
++      if (now - view->motion_changed >= 360) view->motion_active = 0;
++    }
++  if (scene_due)
++    {
++      motion->last = now;
++      erdtree_ambient_render (view, now);
++      if (!selection_due)
++        {
++          if (motion->variant == 4)
++            {
++              int w = view->screen.width, h = view->screen.height;
++              region.x += w * 27 / 100;
++              region.y += h * 205 / 1000;
++              region.width = w * 73 / 100 - w * 27 / 100;
++              region.height = h * 67 / 100 - h * 205 / 1000;
++            }
++          else
++            {
++              region.x += view->screen.width / 2;
++              region.width -= view->screen.width / 2;
++            }
++        }
++      grub_video_set_area_status (GRUB_VIDEO_AREA_ENABLED);
++      grub_gfxmenu_view_redraw (view, &region);
++      grub_video_swap_buffers ();
++      if (view->double_repaint) grub_gfxmenu_view_redraw (view, &region);
++      elapsed = grub_get_time_ms () - now;
++      if (elapsed > motion->frame_ms)
++        motion->frame_ms = elapsed > 990 ? 1000 : (unsigned) elapsed + 10;
++    }
++  else
++    grub_gfxmenu_redraw_menu (view);
 +  grub_errno = saved_errno;
 +}
 +
@@ -255,22 +348,59 @@
 +}
 --- /dev/null
 +++ b/grub-core/gfxmenu/erdtree_highlight.h
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,127 @@
 +/* SPDX-License-Identifier: GPL-3.0-or-later
 + * Selection artwork computed only during a brief user-triggered transition.
-+ * Included in gui_list.c after list_impl_t. The background never changes.
++ * Included in gui_list.c after list_impl_t.
 + */
 +#include <grub/env.h>
 +#include <grub/time.h>
++
++/* Keep entry names and actions intact; only the Ring's presentation changes. */
++static void
++erdtree_draw_title (const char *title, grub_font_t font,
++                    grub_video_color_t color, int width, int baseline)
++{
++  const char *variant = grub_env_get ("erdtree_variant");
++  int left = 0;
++  char capitals[512];
++  if (variant && !grub_strcmp (variant, "ring"))
++    {
++      grub_size_t i, length = grub_strlen (title);
++      if (length < sizeof (capitals))
++        {
++          for (i = 0; i <= length; ++i)
++            capitals[i] = title[i] >= 'a' && title[i] <= 'z'
++              ? title[i] - 'a' + 'A' : title[i];
++          title = capitals;
++        }
++      left = (width - grub_font_get_string_width (font, title)) / 2;
++      if (left < 0) left = 0;
++      /* A discreet shadow keeps the fine lettering readable over the knight. */
++      grub_font_draw_string (title, font, grub_video_map_rgb (4, 8, 5),
++                             left + 1, baseline + 1);
++    }
++  grub_font_draw_string (title, font, color, left, baseline);
++}
 +
 +static int
 +erdtree_draw_highlight (list_impl_t self, int top, int width, int height)
 +{
 +  struct grub_video_bitmap *bitmap;
 +  const char *enabled = grub_env_get ("erdtree_motion");
++  const char *variant = grub_env_get ("erdtree_variant");
 +  grub_err_t saved_errno = grub_errno;
 +  grub_uint64_t age;
 +  int x, y, pulse = 0, center = -1000, radius;
++  int color[3] = {200, 163, 94}, tint = 0;
++  int ring = variant && !grub_strcmp (variant, "ring");
++
++  if (variant && !grub_strcmp (variant, "carian"))
++    { color[0] = 130; color[1] = 184; color[2] = 238; tint = 1; }
++  else if (variant && !grub_strcmp (variant, "destined"))
++    { color[0] = 203; color[1] = 75; color[2] = 85; tint = 1; }
++  else if (variant && !grub_strcmp (variant, "farum"))
++    { color[0] = 200; color[1] = 184; color[2] = 150; tint = 1; }
 +
 +  if (!enabled || grub_strcmp (enabled, "1") || width < 64 ||
 +      width > 4096 || height < 12 || height > 200)
@@ -310,6 +440,17 @@
 +        int distance = x > center ? x - center : center - x;
 +        int sweep = distance < radius ? (radius - distance) * 70 / radius : 0;
 +        int vertical = height / 2 - grub_abs (y - height / 2);
++        if (ring)
++          {
++            int horizontal = (width - grub_abs (2 * x - width + 1)) * 256 / width;
++            int soft_y = (height - grub_abs (2 * y - height + 1)) * 256 / height;
++            int opacity = 135 + pulse / 2 + sweep / 3;
++            horizontal = horizontal * horizontal / 256;
++            soft_y = soft_y * soft_y / 256 * soft_y / 256;
++            p[0] = 218; p[1] = 181; p[2] = 95;
++            p[3] = opacity * horizontal / 256 * soft_y / 256;
++            continue;
++          }
 +        int a = 13 + (width - x) * 36 / width;
 +        int edge = x >= 8 && x < width - 8 && (y == 1 || y == height - 2);
 +        int diamond = (grub_abs (x - 8) + grub_abs (y - height / 2) == 6 ||
@@ -322,10 +463,596 @@
 +        p[0] = 200 + (pulse + sweep) / 7;
 +        p[1] = 163 + (pulse + sweep) / 5;
 +        p[2] = 94 + (pulse + sweep) / 4;
++        if (tint)
++          {
++            int c;
++            for (c = 0; c < 3; ++c)
++              p[c] = color[c] + (255 - color[c]) * (pulse + sweep) / 320;
++          }
 +        p[3] = a;
 +      }
 +  grub_video_blit_bitmap (bitmap, GRUB_VIDEO_BLIT_BLEND,
 +                          0, top, 0, 0, width, height);
 +  grub_errno = saved_errno;
 +  return 1;
++}
+--- /dev/null
++++ b/grub-core/gfxmenu/erdtree_ambient.h
+@@ -0,0 +1,232 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later
++ * A swaying Site of Grace and circling light, rendered entirely in GRUB.
++ * One reusable bitmap; no allocations, disk reads or floating point per frame.
++ */
++#include <grub/trig.h>
++
++struct grub_erdtree_ambient
++{
++  struct grub_video_bitmap *frame;
++  grub_uint64_t epoch, last;
++  unsigned frame_ms;
++  int variant;
++  grub_uint8_t *sigil_halo;
++  int halo_width, halo_height;
++  grub_uint16_t flame_mask[2560];
++};
++
++static void erdtree_ring_init (grub_gfxmenu_view_t view);
++
++static int
++erdtree_ambient_enabled (void)
++{
++  const char *value = grub_env_get ("erdtree_ambient");
++  return erdtree_enabled () && (!value || grub_strcmp (value, "0"));
++}
++
++static void
++erdtree_ambient_destroy (grub_gfxmenu_view_t view)
++{
++  if (!view->ambient) return;
++  grub_video_bitmap_destroy (view->ambient->frame);
++  grub_free (view->ambient->sigil_halo);
++  grub_free (view->ambient);
++  view->ambient = 0;
++}
++
++static void
++erdtree_ambient_init (grub_gfxmenu_view_t view)
++{
++  struct grub_video_bitmap *source = view->scaled_desktop_image;
++  struct grub_erdtree_ambient *motion;
++  const char *variant = grub_env_get ("erdtree_variant");
++  grub_err_t saved_errno = grub_errno;
++  int x, y, w = view->screen.width, h = view->screen.height;
++  if (!erdtree_ambient_enabled () || view->ambient || view->ambient_attempted)
++    return;
++  view->ambient_attempted = 1;
++  if (!source || w < 320 || h < 200 || w > 2560 || h > 1600 ||
++      source->mode_info.width != (unsigned) w ||
++      source->mode_info.height != (unsigned) h ||
++      (source->mode_info.blit_format != GRUB_VIDEO_BLIT_FORMAT_RGB_888 &&
++       source->mode_info.blit_format != GRUB_VIDEO_BLIT_FORMAT_RGBA_8888))
++    return;
++  motion = grub_zalloc (sizeof (*motion));
++  if (!motion) goto failed;
++  view->ambient = motion;
++  if (variant && !grub_strcmp (variant, "carian")) motion->variant = 1;
++  else if (variant && !grub_strcmp (variant, "destined")) motion->variant = 2;
++  else if (variant && !grub_strcmp (variant, "farum")) motion->variant = 3;
++  else if (variant && !grub_strcmp (variant, "ring")) motion->variant = 4;
++  if (grub_video_bitmap_create (&motion->frame, w, h, source->mode_info.blit_format))
++    goto failed;
++  for (y = 0; y < h; ++y)
++    grub_memcpy ((grub_uint8_t *) motion->frame->data + y * motion->frame->mode_info.pitch,
++                 (grub_uint8_t *) source->data + y * source->mode_info.pitch,
++                 w * source->mode_info.bytes_per_pixel);
++  motion->epoch = motion->last = grub_get_time_ms ();
++  motion->frame_ms = 50;
++  for (x = 0; x < w; ++x)
++    {
++      int distance = grub_abs (x - w * 745 / 1000);
++      int mask = 256 - (distance - w * 6 / 100) * 256 / (w * 12 / 100);
++      if (mask < 0) mask = 0;
++      if (mask > 256) mask = 256;
++      motion->flame_mask[x] = mask * mask / 256 * (768 - 2 * mask) / 256;
++    }
++  if (motion->variant == 4) erdtree_ring_init (view);
++  return;
++failed:
++  erdtree_ambient_destroy (view);
++  grub_errno = saved_errno;
++}
++
++static struct grub_video_bitmap *
++erdtree_background (grub_gfxmenu_view_t view)
++{
++  if (erdtree_ambient_enabled () && view->ambient) return view->ambient->frame;
++  return view->scaled_desktop_image;
++}
++
++static void
++erdtree_tinted_spark (struct grub_video_bitmap *frame, int cx, int cy, int radius,
++                       int alpha, int red, int green, int blue)
++{
++  int dx, dy, c, w = frame->mode_info.width, h = frame->mode_info.height;
++  int bpp = frame->mode_info.bytes_per_pixel;
++  for (dy = -radius; dy <= radius; ++dy)
++    for (dx = -radius; dx <= radius; ++dx)
++      {
++        int distance = dx * dx + dy * dy;
++        int strength;
++        grub_uint8_t *p;
++        if (distance >= radius * radius || cx + dx < w / 2 || cx + dx >= w ||
++            cy + dy < 0 || cy + dy >= h) continue;
++        strength = alpha * (radius * radius - distance) / (radius * radius);
++        strength = strength * strength / 255;
++        p = (grub_uint8_t *) frame->data + (cy + dy) * frame->mode_info.pitch +
++          (cx + dx) * bpp;
++        for (c = 0; c < 3; ++c)
++          {
++            int value = p[c] + strength * (c == 0 ? red : c == 1 ? green : blue) / 255;
++            p[c] = value > 255 ? 255 : value;
++          }
++      }
++}
++
++static void
++erdtree_spark (struct grub_video_bitmap *frame, int cx, int cy, int radius, int alpha)
++{
++  erdtree_tinted_spark (frame, cx, cy, radius, alpha, 255, 209, 123);
++}
++
++/* Interpolate the integer sine table so a slow wave has no visible steps. */
++static int
++erdtree_wave (unsigned t, unsigned period, unsigned offset)
++{
++  unsigned phase = (t % period) * 65536U / period + offset * 256U;
++  int fraction = phase & 255;
++  return (grub_sin (phase >> 8) * (256 - fraction) +
++          grub_sin ((phase >> 8) + 1) * fraction) / 256;
++}
++
++#include "erdtree_ring.h"
++#include "erdtree_scenes.h"
++
++static void
++erdtree_ambient_render (grub_gfxmenu_view_t view, grub_uint64_t now)
++{
++  struct grub_erdtree_ambient *motion = view->ambient;
++  struct grub_video_bitmap *source = view->scaled_desktop_image;
++  struct grub_video_bitmap *frame = motion->frame;
++  int w = view->screen.width, h = view->screen.height;
++  int bpp = source->mode_info.bytes_per_pixel, x0 = w / 2;
++  unsigned t = (unsigned) (now - motion->epoch);
++  int root = h * 645 / 1000;
++  int sway = erdtree_wave (t, 5600, 0) * (w * 26 / 1000) / 64;
++  int breath = 7 + erdtree_wave (t, 3800, 0) * 5 / 16384;
++  int reaction = 0, x, y, i;
++  if (motion->variant == 4)
++    {
++      erdtree_ring_render (view, now);
++      return;
++    }
++  if (motion->variant)
++    {
++      erdtree_scene_render (view, now);
++      return;
++    }
++  if (view->motion_active && now - view->motion_changed < 360)
++    reaction = (360 - (int) (now - view->motion_changed)) * 12 / 360;
++
++  /* Inverse-sample the immutable artwork. The root and mound never move;
++     the upper flame bends farther, with a smaller wave travelling upward. */
++  for (y = 0; y < h; ++y)
++    {
++      int bend = y < root ? (root - y) * 256 / (h / 2) : 0;
++      int ripple = erdtree_wave (t, 2700, y * 140 / h) * (w * 5 / 1000) / 64;
++      int offset;
++      const grub_uint8_t *row = (const grub_uint8_t *) source->data + y * source->mode_info.pitch;
++      grub_uint8_t *d = (grub_uint8_t *) frame->data +
++        y * frame->mode_info.pitch + x0 * bpp;
++      if (bend > 256) bend = 256;
++      if (y < h / 12) bend = bend * y / (h / 12);
++      offset = (sway + ripple) * bend / 256;
++      if (!bend)
++        {
++          grub_memcpy (d, row + x0 * bpp, (w - x0) * bpp);
++          continue;
++        }
++      for (x = x0; x < w; ++x, d += bpp)
++        {
++          int sx = x * 256 - offset * motion->flame_mask[x] / 256;
++          int fraction, c, glow;
++          const grub_uint8_t *p, *next;
++          if (sx < x0 * 256) sx = x0 * 256;
++          if (sx > (w - 1) * 256) sx = (w - 1) * 256;
++          fraction = sx & 255;
++          p = row + (sx >> 8) * bpp;
++          next = (sx >> 8) < w - 1 ? p + bpp : p;
++          glow = (p[0] > p[2] ? p[0] - p[2] : 0) *
++            (breath + reaction) / 128 * motion->flame_mask[x] / 256 * bend / 256;
++          for (c = 0; c < 3; ++c)
++            {
++              int value = (p[c] * (256 - fraction) + next[c] * fraction) / 256;
++              value += glow * (c == 0 ? 5 : c == 1 ? 4 : 2) / 5;
++              d[c] = value > 255 ? 255 : value;
++            }
++          if (bpp == 4) d[3] = p[3];
++        }
++    }
++
++  /* Soft moving accents follow the existing elliptical grace ring. */
++  for (i = 0; i < 3; ++i)
++    {
++      int trail, radius = w * 3 / 1920;
++      if (radius < 2) radius = 2;
++      for (trail = 0; trail < 28; ++trail)
++        {
++          unsigned angle = i * 85 + trail;
++          int px = w * 743 / 1000 + erdtree_wave (t, 11000, angle + 64) * (w * 211 / 1000) / 16384;
++          int py = h * 760 / 1000 + erdtree_wave (t, 11000, angle) * (h * 143 / 1000) / 16384;
++          int alpha = 30 + trail * 3;
++          erdtree_spark (frame, px, py, radius, alpha);
++        }
++    }
++
++  /* A few motes rise beside the flame, fading before they wrap. */
++  for (i = 0; i < 18; ++i)
++    {
++      unsigned seed = (unsigned) (i + 1) * 2654435761U;
++      unsigned life = 8000 + seed % 7000;
++      unsigned age = (t + seed % life) % life;
++      int fade = age < life / 2 ? age : life - age;
++      int alpha = fade < 1400 ? fade * 130 / 1400 : 130;
++      int px = w * (650 + (seed >> 12) % 200) / 1000 +
++        erdtree_wave (t, 5700 + i * 200, i * 29) * (w / 90) / 16384;
++      int py = h * 60 / 100 - (int) (age * (h / 2) / life);
++      int radius = (2 + i % 2) * w / 1920;
++      if (radius < 2) radius = 2;
++      erdtree_spark (frame, px, py, radius, alpha);
++    }
++}
+--- /dev/null
++++ b/grub-core/gfxmenu/erdtree_scenes.h
+@@ -0,0 +1,151 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later
++ * Alternate native scenes: Carian moonlight, Destined Death, Farum Azula.
++ * Original geometry stays fixed; only light and sparse particles change.
++ */
++
++static void
++erdtree_lightning_segment (struct grub_video_bitmap *frame,
++                           int x1, int y1, int x2, int y2, int alpha)
++{
++  int i, steps = grub_abs (x2 - x1) + grub_abs (y2 - y1);
++  int radius = frame->mode_info.width / 900;
++  if (radius < 2) radius = 2;
++  for (i = 0; i <= steps; ++i)
++    {
++      int x = x1 + (x2 - x1) * i / (steps ? steps : 1);
++      int y = y1 + (y2 - y1) * i / (steps ? steps : 1);
++      erdtree_tinted_spark (frame, x, y, radius, alpha, 255, 234, 193);
++    }
++}
++
++static void
++erdtree_scene_render (grub_gfxmenu_view_t view, grub_uint64_t now)
++{
++  struct grub_erdtree_ambient *motion = view->ambient;
++  struct grub_video_bitmap *source = view->scaled_desktop_image;
++  struct grub_video_bitmap *frame = motion->frame;
++  int w = view->screen.width, h = view->screen.height, x0 = w / 2;
++  int bpp = source->mode_info.bytes_per_pixel, variant = motion->variant;
++  unsigned t = (unsigned) (now - motion->epoch), storm = t % 9300;
++  int breath = 13 + erdtree_wave (t, variant == 2 ? 4200 : 7300, 0) * 11 / 16384;
++  int flash = 0, reaction = 0, x, y, i;
++  if (variant == 3 && storm >= 3100 && storm < 3500)
++    {
++      int phase = storm - 3100;
++      flash = phase < 100 ? phase * 150 / 100 : (400 - phase) * 150 / 300;
++    }
++  if (view->motion_active && now - view->motion_changed < 360)
++    reaction = (360 - (int) (now - view->motion_changed)) * 12 / 360;
++
++  for (y = 0; y < h; ++y)
++    {
++      int shimmer = 6 + erdtree_wave (t, 5800, y * 180 / h) * 6 / 16384;
++      const grub_uint8_t *p = (const grub_uint8_t *) source->data +
++        y * source->mode_info.pitch + x0 * bpp;
++      grub_uint8_t *d = (grub_uint8_t *) frame->data + y * frame->mode_info.pitch + x0 * bpp;
++      for (x = x0; x < w; ++x, p += bpp, d += bpp)
++        {
++          int edge = x - x0 < w / 12 ? (x - x0) * 256 / (w / 12) : 256;
++          int light, red, green, blue;
++          if (variant == 1)
++            {
++              int blue_light = p[2] > p[0] ? p[2] - p[0] : 0;
++              light = blue_light * (breath + shimmer + reaction) / 160 * edge / 256;
++              red = p[0] + light / 2;
++              green = p[1] + light * 4 / 5;
++              blue = p[2] + light;
++            }
++          else if (variant == 2)
++            {
++              int crimson = p[0] > p[1] ? p[0] - p[1] : 0;
++              light = crimson * (breath + shimmer + reaction) / 64 * edge / 256;
++              red = p[0] + light;
++              green = p[1] + light / 6;
++              blue = p[2] + light / 8;
++            }
++          else
++            {
++              int sky = y < h * 55 / 100 ? (h * 55 / 100 - y) * 256 / (h * 55 / 100) : 0;
++              light = (p[0] + p[1] + p[2]) / 3 *
++                (breath / 2 + shimmer + reaction + flash / 7) / 256 * edge / 256 * sky / 256;
++              red = p[0] + light;
++              green = p[1] + light * 9 / 10;
++              blue = p[2] + light * 3 / 4;
++            }
++          d[0] = red > 255 ? 255 : red;
++          d[1] = green > 255 ? 255 : green;
++          d[2] = blue > 255 ? 255 : blue;
++          if (bpp == 4) d[3] = p[3];
++        }
++    }
++
++  if (variant == 1)
++    {
++      /* Fixed constellations twinkle slowly; nearby blue dust drifts. */
++      for (i = 0; i < 28; ++i)
++        {
++          unsigned seed = (unsigned) (i + 1) * 2654435761U;
++          int px = w * (550 + (seed >> 12) % 420) / 1000;
++          int py = h * (30 + (seed >> 22) % 480) / 1000;
++          int alpha = 100 + erdtree_wave (t, 3000 + i * 113, i * 31) * 85 / 16384;
++          int radius = (i % 5 == 0 ? 4 : 2) * w / 1920;
++          if (radius < 2) radius = 2;
++          erdtree_tinted_spark (frame, px, py, radius, alpha, 130, 199, 255);
++        }
++    }
++
++  for (i = 0; i < (variant == 2 ? 30 : 20); ++i)
++    {
++      unsigned seed = (unsigned) (i + 1) * 2246822519U;
++      unsigned life = 8500 + seed % 11000, age = (t + seed % life) % life;
++      int fade = age < life / 2 ? age : life - age;
++      int alpha = fade < 1200 ? fade * 155 / 1200 : 155;
++      int px = w * (550 + (seed >> 12) % 380) / 1000 +
++        erdtree_wave (t, 7300 + i * 173, i * 31) * (w / 80) / 16384;
++      int py = h * 93 / 100 - (int) (age * (h * 83 / 100) / life);
++      int radius = (2 + i % 2) * w / 1920;
++      if (radius < 2) radius = 2;
++      if (variant == 1)
++        erdtree_tinted_spark (frame, px, py, radius, alpha, 118, 187, 255);
++      else if (variant == 2)
++        {
++          erdtree_tinted_spark (frame, px, py, radius, alpha + 25, 255, 69, 46);
++          erdtree_tinted_spark (frame, px - 1, py + radius, radius, alpha / 2, 255, 42, 33);
++        }
++      else
++        {
++          px += (int) (age * (w / 24) / life);
++          py = h - py;
++          erdtree_tinted_spark (frame, px, py, radius, alpha / 2, 209, 194, 167);
++        }
++    }
++
++  if (variant == 2)
++    {
++      /* Thin red energy coils rise beside the blade, never warping its edge. */
++      for (i = 0; i < 3; ++i)
++        {
++          int trail;
++          unsigned age = (t + i * 2100) % 6500;
++          for (trail = 0; trail < 26; ++trail)
++            {
++              int py = h * 82 / 100 - (int) (age * (h * 61 / 100) / 6500) + trail * h / 1600;
++              int px = w * 765 / 1000 + erdtree_wave (t, 4800, py * 400 / h + i * 60) * (w / 25) / 16384;
++              int edge = age < 800 ? age : age > 5700 ? 6500 - age : 800;
++              int radius = w / 700;
++              if (radius < 2) radius = 2;
++              erdtree_tinted_spark (frame, px, py, radius, (95 - trail * 2) * edge / 800, 255, 50, 55);
++            }
++        }
++    }
++
++  if (flash)
++    {
++      static const int points[][2] = {{918,100},{901,158},{911,180},{884,230},{896,238},{872,302}};
++      for (i = 0; i < 5; ++i)
++        erdtree_lightning_segment (frame, w * points[i][0] / 1000, h * points[i][1] / 1000,
++                                   w * points[i+1][0] / 1000, h * points[i+1][1] / 1000, flash);
++      erdtree_lightning_segment (frame, w * 911 / 1000, h * 180 / 1000,
++                                 w * 934 / 1000, h * 225 / 1000, flash / 2);
++    }
++}
+--- /dev/null
++++ b/grub-core/gfxmenu/erdtree_ring.h
+@@ -0,0 +1,188 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later
++ * Localized bloom and flowing gold dust around the supplied cover's sigil.
++ * A quarter-resolution glow mask is prepared once, then reused each frame.
++ * The source bitmap, logo, landscape, character and menu are untouched.
++ */
++
++static void
++erdtree_ring_init (grub_gfxmenu_view_t view)
++{
++  struct grub_erdtree_ambient *motion = view->ambient;
++  struct grub_video_bitmap *source = view->scaled_desktop_image;
++  grub_err_t saved_errno = grub_errno;
++  grub_uint8_t *scratch;
++  int w = view->screen.width, h = view->screen.height;
++  int hw = (w + 3) / 4, hh = (h + 3) / 4, x, y, pass;
++  int bpp = source->mode_info.bytes_per_pixel, radius = 7;
++  motion->halo_width = hw;
++  motion->halo_height = hh;
++  motion->sigil_halo = grub_zalloc (hw * hh);
++  scratch = grub_zalloc (hw * hh);
++  if (!motion->sigil_halo || !scratch)
++    {
++      grub_free (motion->sigil_halo);
++      grub_free (scratch);
++      motion->sigil_halo = 0;
++      grub_errno = saved_errno;
++      return;
++    }
++  for (y = 0; y < hh; ++y)
++    for (x = 0; x < hw; ++x)
++      {
++        const grub_uint8_t *p = (const grub_uint8_t *) source->data +
++          y * 4 * source->mode_info.pitch + x * 4 * bpp;
++        int warm = p[0] - p[2] - 20;
++        if (x * 4 < w * 32 / 100 || x * 4 >= w * 68 / 100 ||
++            y * 4 < h * 205 / 1000 || y * 4 >= h * 67 / 100) continue;
++        if (warm > 0)
++          motion->sigil_halo[y * hw + x] = warm * p[0] / 255;
++      }
++  /* Two separable box passes give a soft halo, without blurring the artwork. */
++  for (pass = 0; pass < 2; ++pass)
++    {
++      for (y = 0; y < hh; ++y)
++        {
++          int sum = 0;
++          for (x = 0; x <= radius && x < hw; ++x)
++            sum += motion->sigil_halo[y * hw + x];
++          for (x = 0; x < hw; ++x)
++            {
++              scratch[y * hw + x] = sum / (2 * radius + 1);
++              if (x >= radius) sum -= motion->sigil_halo[y * hw + x - radius];
++              if (x + radius + 1 < hw) sum += motion->sigil_halo[y * hw + x + radius + 1];
++            }
++        }
++      for (x = 0; x < hw; ++x)
++        {
++          int sum = 0;
++          for (y = 0; y <= radius && y < hh; ++y) sum += scratch[y * hw + x];
++          for (y = 0; y < hh; ++y)
++            {
++              motion->sigil_halo[y * hw + x] = sum / (2 * radius + 1);
++              if (y >= radius) sum -= scratch[(y - radius) * hw + x];
++              if (y + radius + 1 < hh) sum += scratch[(y + radius + 1) * hw + x];
++            }
++        }
++    }
++  grub_free (scratch);
++  grub_errno = saved_errno;
++}
++
++/* Subpixel soft motes, clipped to the same area that is restored each frame. */
++static void
++erdtree_ring_mote (struct grub_video_bitmap *frame, int cx, int cy,
++                   int radius, int alpha)
++{
++  int w = frame->mode_info.width, h = frame->mode_info.height;
++  int bpp = frame->mode_info.bytes_per_pixel;
++  int x, y, r2 = radius * radius * 65536;
++  int x0 = grub_max (cx / 256 - radius, w * 27 / 100);
++  int x1 = grub_min (cx / 256 + radius + 1, w * 73 / 100);
++  int y0 = grub_max (cy / 256 - radius, h * 205 / 1000);
++  int y1 = grub_min (cy / 256 + radius + 1, h * 67 / 100);
++  for (y = y0; y < y1; ++y)
++    for (x = x0; x < x1; ++x)
++      {
++        int dx = x * 256 - cx, dy = y * 256 - cy;
++        int distance = dx * dx + dy * dy, strength, c;
++        grub_uint8_t *p;
++        if (distance >= r2) continue;
++        strength = (r2 - distance) * 256 / r2;
++        strength = alpha * strength / 256 * strength / 256;
++        p = (grub_uint8_t *) frame->data + y * frame->mode_info.pitch + x * bpp;
++        for (c = 0; c < 3; ++c)
++          {
++            int value = p[c] + strength * (c == 0 ? 255 : c == 1 ? 204 : 92) / 255;
++            p[c] = value > 255 ? 255 : value;
++          }
++      }
++}
++
++static void
++erdtree_ring_particles (struct grub_video_bitmap *frame, unsigned t)
++{
++  int w = frame->mode_info.width, h = frame->mode_info.height;
++  int i, tail, radius = grub_max (2, w / 800);
++  /* Time-derived paths need no particle allocations or accumulated state.
++     Dust rises from the ring, curls outward, then fades before wrapping. */
++  for (i = 0; i < 38; ++i)
++    {
++      unsigned period = 7800 + (i * 577) % 5900;
++      int age = (t % period + i * 1799U) % period;
++      int side = i & 1 ? 1 : -1;
++      int fade = grub_min (255, grub_min (age * 255 / (int) (period / 8),
++                                         ((int) period - age) * 255 / (int) (period / 5)));
++      for (tail = 3; tail >= 0; --tail)
++        {
++          int sample_age = age - tail * 55;
++          int phase, xf, yf, cx, cy, alpha;
++          if (sample_age < 0) continue;
++          phase = sample_age * 65536 / period;
++          xf = 32768 + side * (2300 + (i * 113) % 2400 + phase * 9600 / 65536);
++          xf += erdtree_wave (sample_age, period, i * 37) * 500 / 16384;
++          yf = 41943 - phase * 26869 / 65536;
++          cx = w * xf / 256;
++          cy = h * yf / 256;
++          alpha = fade * (tail ? 70 - tail * 16 : 210) / 255;
++          if (!tail)
++            erdtree_ring_mote (frame, cx, cy, radius * 3, fade * 42 / 255);
++          erdtree_ring_mote (frame, cx, cy, radius, alpha);
++        }
++    }
++}
++
++static void
++erdtree_ring_render (grub_gfxmenu_view_t view, grub_uint64_t now)
++{
++  struct grub_erdtree_ambient *motion = view->ambient;
++  struct grub_video_bitmap *source = view->scaled_desktop_image;
++  struct grub_video_bitmap *frame = motion->frame;
++  int w = view->screen.width, h = view->screen.height;
++  int x0 = w * 32 / 100, x1 = w * 68 / 100;
++  int y0 = h * 205 / 1000, y1 = h * 67 / 100;
++  int bpp = source->mode_info.bytes_per_pixel, x, y;
++  unsigned t = (unsigned) (now - motion->epoch);
++  int breath = 68 + erdtree_wave (t, 5200, 0) * 56 / 16384;
++  grub_uint8_t filaments[2560];
++  int reaction = 0;
++  if (view->motion_active && now - view->motion_changed < 360)
++    reaction = (360 - (int) (now - view->motion_changed)) * 10 / 360;
++  /* Slow crossing waves move light through the existing golden filaments.
++     Compute the column wave once; no trig or allocation in the pixel loop. */
++  for (x = x0; x < x1; ++x)
++    {
++      int wave = 128 + erdtree_wave (t, 3600, x * 640 / w) / 128;
++      filaments[x] = wave * wave / 4096;
++    }
++  for (y = y0; y < y1; ++y)
++    {
++      int edge_y = y - y0 < y1 - y ? y - y0 : y1 - y;
++      int wave = 128 + erdtree_wave (t, 4400, y * 768 / h) / 128;
++      int trace = 3 + wave * wave * wave / 1048576;
++      const grub_uint8_t *p = (const grub_uint8_t *) source->data + y * source->mode_info.pitch + x0 * bpp;
++      grub_uint8_t *d = (grub_uint8_t *) frame->data + y * frame->mode_info.pitch + x0 * bpp;
++      /* Clear the wider particle field from the immutable source. */
++      grub_memcpy ((grub_uint8_t *) frame->data + y * frame->mode_info.pitch + w * 27 / 100 * bpp,
++                   (const grub_uint8_t *) source->data + y * source->mode_info.pitch + w * 27 / 100 * bpp,
++                   (w * 73 / 100 - w * 27 / 100) * bpp);
++      edge_y = edge_y < h / 24 ? edge_y * 256 / (h / 24) : 256;
++      for (x = x0; x < x1; ++x, p += bpp, d += bpp)
++        {
++          int edge_x = x - x0 < x1 - x ? x - x0 : x1 - x;
++          int warm = p[0] > p[2] + 20 ? p[0] - p[2] - 20 : 0;
++          int halo = motion->sigil_halo ? motion->sigil_halo[(y / 4) * motion->halo_width + x / 4] : 0;
++          int light, c;
++          edge_x = edge_x < w / 24 ? edge_x * 256 / (w / 24) : 256;
++          light = (halo * (breath + reaction) / 72 +
++                   warm * (trace + filaments[x]) / 120) * edge_x / 256 * edge_y / 256;
++          for (c = 0; c < 3; ++c)
++            {
++              /* Roll off near white instead of clipping the brightest gold. */
++              int value = p[c] + light * (c == 0 ? 255 : c == 1 ? 196 : 67) / 255 * (255 - p[c]) / 170;
++              d[c] = value > 255 ? 255 : value;
++            }
++          if (bpp == 4) d[3] = p[3];
++        }
++    }
++  erdtree_ring_particles (frame, t);
 +}
