@@ -1,0 +1,12 @@
+{
+  "resolution": "1920x1080",
+  "host_disks_attached": false,
+  "mode": "autoboot",
+  "iso_sha256": "a91b360f4505567f0d8a3ffb1c00c669630c0e575da1464b1b440e812b961a0a",
+  "checks": {
+    "countdown_and_confirmation_execute": true,
+    "no_grub_errors": true
+  },
+  "autoboot_seconds": 4.209,
+  "passed": true
+}

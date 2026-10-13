@@ -1,0 +1,34 @@
+# Erdtree: static artwork, event-triggered native menu effects.
+title-text: ""
+desktop-image: "background.png"
+desktop-image-scale-method: "stretch"
+desktop-color: "#080908"
+terminal-font: "Unifont Regular 16"
+terminal-box: "terminal_*.png"
+terminal-left: "6%"
+terminal-top: "8%"
+terminal-width: "88%"
+terminal-height: "84%"
+terminal-border: "12"
++ boot_menu {
+ left = 4% top = 46% width = 43% height = 35%
+ item_font = "Erdtree Regular 42"
+ selected_item_font = "Erdtree Regular 42"
+ item_color = "#d3c3a1" selected_item_color = "#f8e7be"
+ icon_width = 0 icon_height = 0 item_icon_space = 0
+ item_height = 62 item_padding = 0 item_spacing = 21
+ item_pixmap_style = "normal_*.png"
+ selected_item_pixmap_style = "selected_*.png"
+ scrollbar = false
+}
++ label {
+ left = 6% top = 89% width = 40% height = 30
+ text = "↑ ↓   SELECT       ENTER   BOOT"
+ font = "Erdtree Regular 20" color = "#bd9c61"
+}
++ label {
+ id = "__timeout__"
+ left = 6% top = 93% width = 40% height = 30
+ text = "Continuing in %d seconds"
+ font = "Erdtree Regular 20" color = "#bd9c61"
+}

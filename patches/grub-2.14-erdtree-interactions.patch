@@ -1,0 +1,331 @@
+--- a/grub-core/gfxmenu/gfxmenu.c
++++ b/grub-core/gfxmenu/gfxmenu.c
+@@ -123,6 +123,8 @@
+   instance->fini = grub_gfxmenu_viewer_fini;
+   instance->print_timeout = grub_gfxmenu_print_timeout;
+   instance->clear_timeout = grub_gfxmenu_clear_timeout;
++  instance->idle = grub_gfxmenu_motion_idle;
++  instance->confirm = grub_gfxmenu_motion_confirm;
+ 
+   grub_menu_register_viewer (instance);
+ 
+--- a/grub-core/gfxmenu/gui_list.c
++++ b/grub-core/gfxmenu/gui_list.c
+@@ -82,15 +82,18 @@
+   grub_gfxmenu_icon_manager_t icon_manager;
+ 
+   grub_gfxmenu_view_t view;
++  struct grub_video_bitmap *motion_highlight;
+ };
+ 
+ typedef struct grub_gui_list_impl *list_impl_t;
++#include "erdtree_highlight.h"
+ 
+ static void
+ list_destroy (void *vself)
+ {
+   list_impl_t self = vself;
+ 
++  grub_video_bitmap_destroy (self->motion_highlight);
+   grub_free (self->theme_dir);
+   grub_free (self->menu_box_pattern);
+   grub_free (self->item_box_pattern);
+@@ -404,7 +407,9 @@
+ 
+       if (is_selected)
+         {
+-          selbox->draw (selbox, 0, item_top + sel_box_top_offset);
++          if (!erdtree_draw_highlight (self, item_top + sel_box_top_offset,
++                                      cwidth, text_box_height))
++            selbox->draw (selbox, 0, item_top + sel_box_top_offset);
+           font = self->selected_item_font;
+           color = sel_color;
+           text_top_offset = sel_text_top_offset;
+--- a/grub-core/gfxmenu/view.c
++++ b/grub-core/gfxmenu/view.c
+@@ -43,6 +43,7 @@
+ static void
+ init_background (grub_gfxmenu_view_t view);
+ static grub_gfxmenu_view_t term_view;
++#include "erdtree_view.h"
+ 
+ /* Create a new view object, loading the theme specified by THEME_PATH and
+    associating MODEL with the view.  */
+@@ -72,6 +73,8 @@
+   view->screen.width = width;
+   view->screen.height = height;
+ 
++  view->motion_changed = view->motion_last = 0;
++  view->motion_active = view->motion_confirming = 0;
+   view->need_to_check_sanity = 1;
+   view->terminal_border = 3;
+   view->terminal_rect.width = view->screen.width * 7 / 10;
+@@ -406,6 +409,12 @@
+ {
+   grub_gfxmenu_view_t view = data;
+ 
++  if (entry != view->selected && erdtree_enabled ())
++    {
++      view->motion_changed = grub_get_time_ms ();
++      view->motion_last = 0;
++      view->motion_active = 1;
++    }
+   view->selected = entry;
+   grub_gfxmenu_redraw_menu (view);
+ }
+--- a/grub-core/normal/menu.c
++++ b/grub-core/normal/menu.c
+@@ -367,6 +367,14 @@
+ }
+ 
+ static struct grub_menu_viewer *viewers;
++
++static void
++menu_confirm (void)
++{
++  struct grub_menu_viewer *viewer;
++  for (viewer = viewers; viewer; viewer = viewer->next)
++    if (viewer->confirm) viewer->confirm (viewer->data);
++}
+ 
+ static void
+ menu_set_chosen_entry (int entry)
+@@ -695,11 +703,18 @@
+ 	{
+ 	  grub_env_unset ("timeout");
+           *auto_boot = 1;
++          menu_confirm ();
+ 	  menu_fini ();
+ 	  return default_entry;
+ 	}
+ 
+       c = grub_getkey_noblock ();
++      if (c == GRUB_TERM_NO_KEY)
++        {
++          struct grub_menu_viewer *viewer;
++          for (viewer = viewers; viewer; viewer = viewer->next)
++            if (viewer->idle) viewer->idle (viewer->data);
++        }
+ 
+       /* Negative values are returned on error. */
+       if ((c != GRUB_TERM_NO_KEY) && (c > 0))
+@@ -761,6 +776,7 @@
+ 	    case '\r':
+ 	    case GRUB_TERM_KEY_RIGHT:
+ 	    case GRUB_TERM_CTRL | 'f':
++              menu_confirm ();
+ 	      menu_fini ();
+               *auto_boot = 0;
+ 	      return current_entry;
+@@ -798,6 +814,8 @@
+ 		entry = get_entry_index_by_hotkey (menu, c);
+ 		if (entry >= 0)
+ 		  {
++                    menu_set_chosen_entry (entry);
++                    menu_confirm ();
+ 		    menu_fini ();
+ 		    *auto_boot = 0;
+ 		    return entry;
+--- a/include/grub/gfxmenu_view.h
++++ b/include/grub/gfxmenu_view.h
+@@ -44,6 +44,8 @@
+                                   const char *pattern, const char *theme_dir);
+ 
+ void grub_gfxmenu_view_draw (grub_gfxmenu_view_t view);
++void grub_gfxmenu_motion_idle (void *data);
++void grub_gfxmenu_motion_confirm (void *data);
+ 
+ void
+ grub_gfxmenu_redraw_menu (grub_gfxmenu_view_t view);
+@@ -111,6 +113,8 @@
+   int double_repaint;
+ 
+   int selected;
++  grub_uint64_t motion_changed, motion_last;
++  int motion_active, motion_confirming;
+ 
+   grub_video_rect_t progress_message_frame;
+ 
+--- a/include/grub/menu_viewer.h
++++ b/include/grub/menu_viewer.h
+@@ -34,6 +34,8 @@
+   void (*print_timeout) (int timeout, void *data);
+   void (*clear_timeout) (void *data);
+   void (*fini) (void *fini);
++  void (*idle) (void *data);
++  void (*confirm) (void *data);
+ };
+ 
+ void grub_menu_register_viewer (struct grub_menu_viewer *viewer);
+--- /dev/null
++++ b/grub-core/gfxmenu/erdtree_view.h
+@@ -0,0 +1,93 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later
++ * Event-driven menu effects. No scene animation and no disk I/O in a frame.
++ * Included by gfxmenu/view.c. Opt in with set erdtree_motion=1.
++ */
++#include <grub/env.h>
++
++static int
++erdtree_enabled (void)
++{
++  const char *value = grub_env_get ("erdtree_motion");
++  return value && !grub_strcmp (value, "1");
++}
++
++void
++grub_gfxmenu_motion_idle (void *data)
++{
++  grub_gfxmenu_view_t view = data;
++  grub_uint64_t now;
++  grub_err_t saved_errno = grub_errno;
++  if (!erdtree_enabled () || !view->motion_active)
++    return;
++  now = grub_get_time_ms ();
++  if (now - view->motion_last < 25)
++    return;
++  view->motion_last = now;
++  if (now - view->motion_changed >= 360)
++    view->motion_active = 0;
++  grub_gfxmenu_redraw_menu (view);
++  grub_errno = saved_errno;
++}
++
++void
++grub_gfxmenu_motion_confirm (void *data)
++{
++  grub_gfxmenu_view_t view = data;
++  struct grub_video_bitmap *fade = 0;
++  grub_menu_entry_t entry;
++  grub_uint64_t start, age;
++  grub_err_t saved_errno = grub_errno;
++  int w = view->screen.width, h = view->screen.height, duration, last_alpha = -1;
++
++  if (!erdtree_enabled () || w < 320 || h < 200 || w > 2560 || h > 1600)
++    return;
++  entry = grub_menu_get_entry (view->menu, view->selected);
++  if (!entry)
++    return;
++  /* A submenu gets the acknowledgement flash without the full boot fade. */
++  duration = entry->submenu ? 170 : 850;
++  if (!entry->submenu &&
++      grub_video_bitmap_create (&fade, w, h, GRUB_VIDEO_BLIT_FORMAT_RGBA_8888))
++    {
++      grub_errno = saved_errno;
++      return;
++    }
++  if (fade)
++    grub_memset (fade->data, 0, fade->mode_info.pitch * h);
++  view->motion_confirming = 1;
++  view->motion_active = 0;
++  start = grub_get_time_ms ();
++
++  do
++    {
++      int alpha, pass;
++      age = grub_get_time_ms () - start;
++      if (age > (unsigned) duration) age = duration;
++      alpha = age > 170 ? (int) (age - 170) * 255 / (duration - 170) : 0;
++      /* Smoothstep fade: no abrupt cut at either end. */
++      alpha = alpha * alpha * (765 - 2 * alpha) / 65025;
++      if (fade && alpha != last_alpha)
++        {
++          int x, y;
++          for (y = 0; y < h; ++y)
++            for (x = 0; x < w; ++x)
++              ((grub_uint8_t *) fade->data)[y * fade->mode_info.pitch + x * 4 + 3] = alpha;
++          last_alpha = alpha;
++        }
++      for (pass = 0; pass < (view->double_repaint ? 2 : 1); ++pass)
++        {
++          grub_video_set_viewport (0, 0, w, h);
++          grub_video_set_area_status (GRUB_VIDEO_AREA_DISABLED);
++          grub_gfxmenu_view_redraw (view, &view->screen);
++          if (fade && alpha)
++            grub_video_blit_bitmap (fade, GRUB_VIDEO_BLIT_BLEND, 0, 0, 0, 0, w, h);
++          if (pass == 0) grub_video_swap_buffers ();
++        }
++      if (age < (unsigned) duration) grub_millisleep (20);
++    }
++  while (age < (unsigned) duration);
++
++  grub_video_bitmap_destroy (fade);
++  view->motion_confirming = 0;
++  grub_errno = saved_errno;
++}
+--- /dev/null
++++ b/grub-core/gfxmenu/erdtree_highlight.h
+@@ -0,0 +1,73 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later
++ * Selection artwork computed only during a brief user-triggered transition.
++ * Included in gui_list.c after list_impl_t. The background never changes.
++ */
++#include <grub/env.h>
++#include <grub/time.h>
++
++static int
++erdtree_draw_highlight (list_impl_t self, int top, int width, int height)
++{
++  struct grub_video_bitmap *bitmap;
++  const char *enabled = grub_env_get ("erdtree_motion");
++  grub_err_t saved_errno = grub_errno;
++  grub_uint64_t age;
++  int x, y, pulse = 0, center = -1000, radius;
++
++  if (!enabled || grub_strcmp (enabled, "1") || width < 64 ||
++      width > 4096 || height < 12 || height > 200)
++    return 0;
++  bitmap = self->motion_highlight;
++  if (bitmap && ((int) bitmap->mode_info.width != width ||
++                 (int) bitmap->mode_info.height != height))
++    {
++      grub_video_bitmap_destroy (bitmap);
++      self->motion_highlight = bitmap = 0;
++    }
++  if (!bitmap)
++    {
++      if (grub_video_bitmap_create (&bitmap, width, height,
++                                   GRUB_VIDEO_BLIT_FORMAT_RGBA_8888))
++        {
++          grub_errno = saved_errno;
++          return 0;
++        }
++      self->motion_highlight = bitmap;
++    }
++  age = grub_get_time_ms () - self->view->motion_changed;
++  radius = width / 5;
++  if (self->view->motion_active && age < 360)
++    {
++      pulse = (360 - (int) age) * 85 / 360;
++      center = -radius + (int) age * (width + 2 * radius) / 360;
++    }
++  if (self->view->motion_confirming)
++    pulse = 125;
++
++  for (y = 0; y < height; ++y)
++    for (x = 0; x < width; ++x)
++      {
++        grub_uint8_t *p = (grub_uint8_t *) bitmap->data +
++          y * bitmap->mode_info.pitch + x * 4;
++        int distance = x > center ? x - center : center - x;
++        int sweep = distance < radius ? (radius - distance) * 70 / radius : 0;
++        int vertical = height / 2 - grub_abs (y - height / 2);
++        int a = 13 + (width - x) * 36 / width;
++        int edge = x >= 8 && x < width - 8 && (y == 1 || y == height - 2);
++        int diamond = (grub_abs (x - 8) + grub_abs (y - height / 2) == 6 ||
++                       grub_abs (x - (width - 9)) + grub_abs (y - height / 2) == 6);
++        a += (pulse + sweep) * (height / 2 + vertical) / height;
++        if (edge) a = 108 + pulse + sweep;
++        if (diamond) a = 195 + pulse / 3;
++        if (x < 8 || x >= width - 8) a = diamond ? a : 0;
++        if (a > 255) a = 255;
++        p[0] = 200 + (pulse + sweep) / 7;
++        p[1] = 163 + (pulse + sweep) / 5;
++        p[2] = 94 + (pulse + sweep) / 4;
++        p[3] = a;
++      }
++  grub_video_blit_bitmap (bitmap, GRUB_VIDEO_BLIT_BLEND,
++                          0, top, 0, 0, width, height);
++  grub_errno = saved_errno;
++  return 1;
++}

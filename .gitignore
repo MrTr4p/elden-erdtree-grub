@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+vendor/
+build/
+prefix/
+dist/
+previews/
+*.log
+live-preview-url.txt
+.env
+.venv/
+*.iso
+*.efi

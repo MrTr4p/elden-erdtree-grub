@@ -1,0 +1,28 @@
+name: Check
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl bison flex gettext pkg-config libfreetype6-dev python3-pil grub-common grub-efi-amd64-bin
+      - name: Installer recovery tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Python and shell syntax
+        run: |
+          python3 -m py_compile *.py
+          sh -n install.sh build.sh
+      - name: Regenerate theme
+        run: python3 build-theme.py --output dist/theme
+      - name: Build pinned GRUB
+        run: ./build.sh
+      - name: Patcher is repeatable
+        run: |
+          cp patches/grub-2.14-erdtree-interactions.patch /tmp/erdtree-patch.before
+          python3 patch-source.py
+          cmp /tmp/erdtree-patch.before patches/grub-2.14-erdtree-interactions.patch

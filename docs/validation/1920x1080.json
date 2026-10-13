@@ -1,0 +1,29 @@
+{
+  "resolution": "1920x1080",
+  "host_disks_attached": false,
+  "mode": "interactive",
+  "iso_sha256": "6d5de276e6a38c46f95ca8d3b666f703203051af3dc93654ac5adb7ff25a640e",
+  "checks": {
+    "resolution": true,
+    "entire_scene_still_when_idle": true,
+    "selection_changes": true,
+    "tree_stays_identical_during_selection": true,
+    "selection_shimmer_has_multiple_frames": true,
+    "selection_settles_completely": true,
+    "confirmation_fades_scene": true,
+    "windows_test_action_runs": true,
+    "submenu_opens": true,
+    "entry_editor_opens": true,
+    "console_opens": true,
+    "scene_still_after_return": true,
+    "rapid_input_selects_windows": true,
+    "linux_test_action_runs": true,
+    "no_grub_errors": true
+  },
+  "confirmation_tree_brightness_range": [
+    0.0,
+    40.625
+  ],
+  "recording_wall_seconds": 9.697,
+  "passed": true
+}
